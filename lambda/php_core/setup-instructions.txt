@@ -1,0 +1,12 @@
+my git comes with precompiled PHP layer for AWS Lambda.
+
+However, if you want to compile your own PHP layer and vendor files, create new server in AWS EC2 that is type of amazon linux 2 and access it with SSH. If you are unsure how to do this, please check my video below:
+
+start your Amazon Linux 2 instance:
+https://www.youtube.com/watch?v=i7OKNbiSgZs
+
+
+
+
+
+

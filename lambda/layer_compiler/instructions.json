@@ -1,0 +1,14 @@
+{
+  "instructions": {
+    "aws-php-includes": [
+      {
+        "path": "aws_includes/class_awshelper.php",
+        "destination": "includes/class_awshelper.php"
+      },
+      {
+        "path": "aws_includes/class_sqlhelper.php",
+        "destination": "includes/class_sqlhelper.php"
+      }
+    ]
+  }
+}
