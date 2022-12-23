@@ -8,7 +8,7 @@
 	{
 		class awshelper 
 		{
-			var $version;
+			public $version;
 
 			function __construct($data)
 			{
