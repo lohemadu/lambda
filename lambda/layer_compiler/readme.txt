@@ -10,7 +10,8 @@ instructions file for layer compiler has to be in following format:
       {
         "path": "/lambda/layer_compiler/aws_includes/class_awshelper.php",
         "destination": "includes/class_awshelper.php"
-      }
+      },
+	//...
     ]
   }
 }
