@@ -4,8 +4,8 @@
       {
         //destination files go under /opt/.. folder in lambda.
         //meaning that destination src/sample.php goes to /opt/src/sample.com in lambda        
-        "path": "/lambda/layer_compiler/aws_include/class_awshelper.php",
-        "destination": "includes/class_awshelper.php"
+        "path": "/lambda/layer_compiler/aws_include/_class_awshelper.php",
+        "destination": "includes/_class_awshelper.php"
       },
       {
         "path": "/lambda/layer_compiler/aws_include/class_mysql.php",
