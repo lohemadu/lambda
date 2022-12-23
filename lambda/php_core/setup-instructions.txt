@@ -1,12 +1,44 @@
-my git comes with precompiled PHP layer for AWS Lambda.
+This repository comes with compiled PHP layer and vendor files for AWS Lambda.
 
 However, if you want to compile your own PHP layer and vendor files, create new server in AWS EC2 that is type of amazon linux 2 and access it with SSH. If you are unsure how to do this, please check my video below:
 
-start your Amazon Linux 2 instance:
+setting up EC2 instance for compiling PHP
 https://www.youtube.com/watch?v=i7OKNbiSgZs
 
+compiling PHP in linux for AWS Lambda
+https://www.youtube.com/watch?v=9zjtFzBu3HE&t=171s
+
+Uploading Layers to AWS Lambda
+https://www.youtube.com/watch?v=dk0l1CBm-8E&t=1s
+
+How to use it in AWS Lambda
+
+1. log in to your AWS Lambda
+2. Open Layers
+3. Press Create Layer button on top-right corner
+4. Name new Layer as "aws-php-runtime", Runtime: "Custom runtime on Amazon Linux 2"
+5. Upload aws-runtime-layer-php-8.0-v1.zip
+
+6. Press Create Layer button once again
+7. Name new Layer as "aws-php-vendor", Runtime: "Custom runtime on Amazon Linux 2"
+8. Upload aws-php-vendor-v1.zip
+
+9. open aws-php-runtime layer and copy ARN of the latest version of aws-php-runtime layer to text editor
+it looks something like that:
+	arn:aws:lambda:eu-north-1:*********:layer:aws-php-runtime:1
+
+10. open aws-php-vendor layer and copy ARN of the latest version of aws-php-vendor layer to text editor
+it looks something like that:
+	arn:aws:lambda:eu-north-1:*********:layer:aws-php-vendor:1
 
 
+To use these PHP and Vendor files on your function, create new function:
 
+12. Type Function Name
+13. Specify Runtime: Provide your own bootstrap on Amazon Linux 2
+14. Create Function.
 
+12. scroll down and click on "Add Layer" button.
+13. Layer Source: Specify an ARN that you wrote down in step #9 -> Add
+14. Layer Source: Specify an ARN that you wrote down in step #10 -> Add
 
