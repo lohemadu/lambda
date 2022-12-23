@@ -1,9 +1,15 @@
 {
   "instructions": {
-    "aws-php-includes": [
+    "aws-php-include": [
       {
-        "path": "/lambda/layer_compiler/aws_includes/class_awshelper.php",
+        //destination files go under /opt/.. folder in lambda.
+        //meaning that destination src/sample.php goes to /opt/src/sample.com in lambda        
+        "path": "/lambda/layer_compiler/aws_include/class_awshelper.php",
         "destination": "includes/class_awshelper.php"
+      },
+      {
+        "path": "/lambda/layer_compiler/aws_include/class_mysql.php",
+        "destination": "includes/class_mysql.php"
       }
     ]
   }
