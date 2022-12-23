@@ -4,10 +4,6 @@
       {
         "path": "/lambda/layer_compiler/aws_includes/class_awshelper.php",
         "destination": "includes/class_awshelper.php"
-      },
-      {
-        "path": "/lambda/layer_compiler/aws_includes/class_sqlhelper.php",
-        "destination": "includes/class_sqlhelper.php"
       }
     ]
   }

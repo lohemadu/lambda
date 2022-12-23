@@ -1,13 +1,20 @@
 <?php
 
+	/*
+		bootstrap file for aws
+	*/
+
 	if (!class_exists('awshelper'))
 	{
 		class awshelper 
 		{
+			var $version;
+
 			function __construct($data)
 			{
-				/* constructor for the aws class */
+				$this->version = 1;
 			}
+
 		}
 	}
 
