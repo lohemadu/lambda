@@ -1,7 +1,7 @@
 <?php
 
 	/*
-		bootstrap file for aws
+		Bootstrap File for AWS Lambda
 	*/
 
 	if (!class_exists('awshelper'))
