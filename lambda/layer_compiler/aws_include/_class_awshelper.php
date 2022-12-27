@@ -30,7 +30,7 @@
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
                 } else
                 if (is_object($data)) {
-                    $data = ['code' => $statuscode, 'result' => $data];
+                    $data = ['code' => $this->success_status, 'result' => $data];
                 } else                
                 if (!is_array($data)) 
                 {
