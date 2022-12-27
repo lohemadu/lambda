@@ -24,15 +24,18 @@
 			function doOk($data = '', $pagination = []) 
             {
             	//success - 200
+                $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
-                    $data = ['success' => true];
-                }
-                else if (!is_array($data)) 
+                    $data = ['code' => $this->error_bad_request, 'error' => 1];
+                } else
+                if (!is_array($data)) 
                 {
                     //result as a string message
-                    $data = ['message' => $data];
-                } else {
+                    $data = ['code' => $this->error_bad_request, 'message' => $data];
+                } else
+                {
+                	//result as an array
                     //result as an array
                     foreach ($pagination as $k => $v) {
                         if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
@@ -40,9 +43,9 @@
                     }
                     
                     $return['records'] = $data;
-                    $data = $return;
+                	$data = ['code' => $this->error_bad_request, 'message' => $return];
                 }
-                
+
                 $result = json_encode([
                     'statusCode' => $this->success_status,
                     'body' => json_encode(
@@ -60,17 +63,21 @@
             /* Result is returning JSON encoded error message with statusCode 400 and Body */
             function doError($data = '') 
             {
-            	//bad request error - 400
+            	//error - 400
+                $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
-                } else if (!is_array($data)) 
+                } else
+                if (!is_array($data)) 
                 {
                     //result as a string message
                     $data = ['code' => $this->error_bad_request, 'message' => $data];
-                } else {
-                    $data['code'] = $this->error_bad_request;
-                }             
+                } else
+                {
+                	//result as an array
+                	$data = ['code' => $this->error_bad_request, 'message' => $data];
+                }
                 
                 $result = json_encode([
                     'statusCode' => $this->error_bad_request,
