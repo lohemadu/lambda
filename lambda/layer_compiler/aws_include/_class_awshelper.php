@@ -24,26 +24,27 @@
 			function doOk($data = '', $pagination = []) 
             {
             	//success - 200
-                $data = trim($data);
+                if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
                 } else
+                if (is_object($data)) {
+                    $data = ['code' => $statuscode, 'result' => $data, 'methods' => get_class_methods($data)];
+                } else                
                 if (!is_array($data)) 
                 {
                     //result as a string message
-                    $data = ['code' => $this->error_bad_request, 'message' => $data];
+                    $data = ['code' => $this->error_bad_request, 'result' => $data];
                 } else
                 {
-                	//result as an array
                     //result as an array
                     foreach ($pagination as $k => $v) {
                         if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
                             $return[$k] = $v;
                     }
                     
-                    $return['records'] = $data;
-                	$data = ['code' => $this->error_bad_request, 'message' => $return];
+                	$data = ['code' => $this->error_bad_request, 'records' => $return];
                 }
 
                 $result = json_encode([
@@ -64,11 +65,14 @@
             function doError($data = '') 
             {
             	//error - 400
-                $data = trim($data);
+                if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
                 } else
+                if (is_object($data)) {
+                    $data = ['code' => $statuscode, 'message' => $data, 'methods' => get_class_methods($data)];
+                } else                
                 if (!is_array($data)) 
                 {
                     //result as a string message
