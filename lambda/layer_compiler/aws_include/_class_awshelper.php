@@ -39,6 +39,7 @@
                 } else
                 {
                     //result as an array
+                    $return = $data;
                     foreach ($pagination as $k => $v) {
                         if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
                             $return[$k] = $v;
