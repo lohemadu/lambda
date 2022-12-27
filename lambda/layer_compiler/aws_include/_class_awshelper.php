@@ -20,6 +20,9 @@
 				$this->started = time();
 			}
 
+			/* Result is establishing SQL Connection */
+
+
 			/* Result is returning JSON encoded successful response with statusCode 200 and Body */
 			function doOk($data = '', $pagination = []) 
             {
@@ -27,7 +30,7 @@
                 if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
-                    $data = ['code' => $this->error_bad_request, 'error' => 1];
+                    $data = ['code' => $this->success_status, 'success' => 1];
                 } else
                 if (is_object($data)) {
                     $data = ['code' => $this->success_status, 'result' => $data];
@@ -35,7 +38,7 @@
                 if (!is_array($data)) 
                 {
                     //result as a string message
-                    $data = ['code' => $this->error_bad_request, 'result' => $data];
+                    $data = ['code' => $this->success_status, 'result' => $data];
                 } else
                 {
                     //result as an array
@@ -45,7 +48,7 @@
                             $return[$k] = $v;
                     }
                     
-                	$data = ['code' => $this->error_bad_request, 'records' => $return];
+                	$data = ['code' => $this->success_status, 'records' => $return];
                 }
 
                 $result = json_encode([
