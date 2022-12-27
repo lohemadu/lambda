@@ -30,7 +30,7 @@
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
                 } else
                 if (is_object($data)) {
-                    $data = ['code' => $statuscode, 'result' => $data, 'methods' => get_class_methods($data)];
+                    $data = ['code' => $statuscode, 'result' => $data];
                 } else                
                 if (!is_array($data)) 
                 {
@@ -65,7 +65,7 @@
             function doError($data = '') 
             {
             	//error - 400
-                if (is_string($data)) $data = trim($data);
+                //if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
