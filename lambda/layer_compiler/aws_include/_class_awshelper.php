@@ -65,7 +65,7 @@
             function doError($data = '') 
             {
             	//error - 400
-                //if (is_string($data)) $data = trim($data);
+                if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
                     $data = ['code' => $this->error_bad_request, 'error' => 1];
