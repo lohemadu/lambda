@@ -457,6 +457,233 @@
         	    }
         	}
 
+
+			//wrapper to call all this class private functions with ['command' => 'funcname'()]
+			/*
+				returns result in case of error only.
+				if no error, $successresult will return the message from the function
+			*/			
+			function doExecute(&$successresult, $data) 
+			{
+			    if (!empty($data['command'])) $data['command'] = '__' . $data['command'];
+			    
+	        	if (!method_exists($this, $data['command']))
+	        	    return 'method $' . get_class($this) . '->' . $data['command'] . '() does not exist';
+			    
+			    $successresult = NULL;
+			    $result = json_decode(call_user_func_array(array($this, $data['command']), array($data['parameters'])), 1);
+			    if (empty($result)) {
+			        return 'function returned without clear result';
+			    }
+			    
+			    $result['body'] = json_decode($result['body'], 1);
+			    
+			    if ($result['body']['status'] == 'success')
+			    {
+			        if (isset($result['body']['data']['result'])) 
+			        {
+			            $successresult = $result['body']['data']['result'];
+			            return false;
+			        }
+			        if (isset($result['body']['data']['records'])) 
+			        {
+			            $successresult = $result['body']['data']['records'];
+			            return false;
+			        }
+
+			    } else {
+			        return $result['body']['data']['message'];
+			    }
+			} 
+
+
+			/*
+				all protected functions must be called through doExecute,
+				even if called from inside this class
+
+
+				inserting a new record to table
+				sample usage:
+
+		        if ($err = $helper->doExecute(${$output = 'query'}, [
+		            'command' => 'doBuildInsertQuery',
+		            'parameters' => [
+		                'tablename' => '_aws_layers',
+		                'fields' => [
+		                    'function_id' => 1,
+		                    'function_data' => 'hello',
+		                    'third' => 'yeah'
+		                ]
+		            ]
+		        ])) return $helper->doError($err);
+		        return $helper->doOk($query);
+			*/
+	        protected function __doBuildInsertQuery($data) 
+	        {
+	            //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
+				if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
+	        	
+	            $packed = array();
+	            foreach($data['fields'] as $k => $v) {
+	                if (!is_array($v)) $packed[$k] = addslashes($v);
+	            }
+	            
+	            $key = array_keys($packed);
+	            $val = array_values($packed);
+	            $query = "INSERT INTO `" . $data['tablename'] . "` (`" . implode('`, `', $key) . "`) " . "VALUES ('" . implode("', '", $val) . "')";
+	            
+	            //for mysql functions we use !!!NOW()!!!
+	            //remove escaping
+	            $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
+	            
+	            return $this->doOk($query);
+	        }
+
+	        /*
+				function will update recordset based on given keys
+
+	        	sample usage:
+
+		        if ($err = $helper->doExecute(${$output = 'query'}, [
+		            'command' => 'doBuildInsertQuery',
+		            'parameters' => [
+		                'tablename' => '_aws_layers',
+		                'fields' => [
+		                    'item_id' => 12,
+		                    'fk_order_id' => 2,
+		                    'item_contents' => 'some item'
+		                ],
+		                'keys' => [
+		                	'item_id',
+		                	'fk_order_id'
+		                ]
+		            ]
+		        ])) return $helper->doError($err);
+		        return $helper->doOk($query);
+	        */
+
+			protected function __doBuildUpdateQuery($data)
+			{
+				//construct update query based on data
+			    //param checks will be deprecated from this function soon
+				if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
+				
+	            foreach ($data['keys'] as $void => $key) {
+	                if (!isset($data['fields'][$key])) return $this->doError('fields[' . $key . '] is not defined in input params');
+	                $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
+	                unset($data['fields'][$key]);
+	            }
+	            $where = implode(' AND ', $wherequery);
+	            if (!$where) {
+	                return $this->doError('where clause is not defined for count query.');
+	            }
+	            
+	            $packed = array();
+	            foreach($data['fields'] as $k => $v) {
+	                if (!is_array($v)) $packed[] = sprintf("`%s` = '%s'", addslashes($k), addslashes($v));
+	            }
+	            
+	            if (!count($packed)) {
+	                return $this->doError('no parameters to update in SQL query');
+	            }
+	            
+	            $query = sprintf("UPDATE `%s` SET %s WHERE %s", $data['tablename'], implode(', ', $packed), $where);
+	            
+	            //for mysql functions we use !!!NOW()!!!
+	            //remove escaping
+	            $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
+
+	            return $this->doOk($query);
+			}
+
+
+			/*
+				function will either update or delete the recordset
+
+				sample usage:
+
+                //enter or update row in _aws_layers_table
+                if ($err = $test->doExecute(${$output = 'query'}, [
+                    'command' => 'doBuildAndMakeInsertOrUpdateQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_layers',
+                        'fields' => [
+                        	'aws_layer_name' => 'my-layer',
+                        	'version' => 12
+                        ],
+                        'keys' => [
+                            'aws_layer_name'
+                        ],
+                        'connection' => $conn
+                    ]
+                ])) return $helper->doError($err);				
+			*/
+	        protected function __doBuildAndMakeInsertOrUpdateQuery($data)
+	        {
+	            
+	            if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
+	            if (!count($data[$tf = 'keys'])) return $this->doError('array is not defined: [' . $tf . ']');
+	            
+	            foreach ($data['keys'] as $void => $key) {
+	                if (!isset($data['fields'][$key])) return $this->doError('fields[' . $key . '] is not defined in input params');
+	                $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
+	            }
+	            $where = implode(' AND ', $wherequery);
+	            if (!$where) {
+	                return $this->doError('where clause is not defined for count query.');
+	            }
+	            
+	            /* depending on keys update or insert command will be chosen */
+	            $countquery = sprintf("SELECT count(*) as `cnt` FROM `%s` WHERE %s", $data['tablename'], $where);
+	            if (!$res = $data['connection']->query($countquery)) {
+	                return $data['connection']->error;
+	            }
+	            
+	            if (!mysqli_num_rows($res)) {
+	                return $this->doError('count query gave no rows, there should be exactly one');
+	            }
+	            
+	            $count = ($row = mysqli_fetch_assoc($res))['cnt'];
+
+	            if ($count) 
+	            {
+	                //update record in dataset
+                    if ($err = $this->doExecute(${$output = 'query'}, [
+                        'command' => 'doBuildUpdateQuery',
+                        'parameters' => [
+                            'tablename' => $data['tablename'],
+                            'fields' => $data['fields'],
+                            'keys' => $data['keys']
+                        ]
+                    ])) return $this->doError($err);  
+
+	                if (!$success = $data['connection']->query($query)) {
+	                    return $this->doError('update sql error: ' . $data['connection']->error);
+	                }
+	                
+	                return $this->doOk('recordset updated');
+	                
+	            } else {
+	                
+	                //insert new record into dataset
+                    if ($err = $this->doExecute(${$output = 'query'}, [
+                        'command' => 'doBuildInsertQuery',
+                        'parameters' => [
+                            'tablename' => $data['tablename'],
+                            'fields' => $data['fields']
+                        ]
+                    ])) return $helper->doError($err);    	                
+	                
+	                if (!$success = $data['connection']->query($query)) {
+	                    return $this->doError('insert sql error: ' . $data['connection']->error);
+	                }
+	                
+	                return $this->doOk('new recordset inserted');
+	            }
+	        }
+
+
+
 		}
 	}
 
