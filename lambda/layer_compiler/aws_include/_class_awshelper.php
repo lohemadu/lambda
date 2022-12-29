@@ -32,8 +32,13 @@
 		            $this->aws_region = $hostparts[2];
 		            $this->aws_function_url = $data['headers']['host'];
 		            $this->aws_requestid = $data['requestContext']['requestId'];
+        	    } else {
+			        if (file_exists($inc = '/var/task/src/credentials.php')) {
+			        	include($inc);
+			            $this->aws_region = $aws_region;
+			        }
         	    }
-        	    
+       	    
         	    //retrieve body and encode it
                 if (!empty($data['requestContext']['http']['method'])) 
                 {
@@ -652,7 +657,7 @@
 	            /* depending on keys update or insert command will be chosen */
 	            $countquery = sprintf("SELECT count(*) as `cnt` FROM `%s` WHERE %s", $data['tablename'], $where);
 	            if (!$res = $data['connection']->query($countquery)) {
-	                return $data['connection']->error;
+	                return $this->doError($data['connection']->error);
 	            }
 	            
 	            if (!mysqli_num_rows($res)) {
