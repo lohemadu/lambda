@@ -15,10 +15,24 @@
         	public $metadata;
         	public $method;
         	public $paramerror = false;
+        	public $aws_domainprefix;
+        	public $aws_region;
+        	public $aws_function_url;
+        	public $aws_requestid;
         
         	function __construct(&$data, $paramsyntax = NULL)
         	{ 
         	    $this->version = 1;
+
+        	    if (isset($data['headers']['host'])) 
+        	    {
+        	    	//environment variables
+        	    	$hostparts = explode('.', $data['headers']['host']);
+		            $this->aws_domainprefix = $hostparts[0];
+		            $this->aws_region = $hostparts[2];
+		            $this->aws_function_url = $data['headers']['host'];
+		            $this->aws_requestid = $data['requestContext']['requestId'];
+        	    }
         	    
         	    //retrieve body and encode it
                 if (!empty($data['requestContext']['http']['method'])) 
@@ -130,6 +144,7 @@
         		    else
         		    {
         		        //move parameter to ignored counter
+        		        //happens if parameter uses characters that are not allowed in parameter
         		        $this->metadata['params']['ignored']++;
         		        unset($data[$paramkey]);
         		    }
