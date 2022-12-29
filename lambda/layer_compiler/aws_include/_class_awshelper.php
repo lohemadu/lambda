@@ -580,7 +580,8 @@
 	            
 	            $packed = array();
 	            foreach($data['fields'] as $k => $v) {
-	                if (!is_array($v)) $packed[] = sprintf("`%s` = '%s'", addslashes($k), addslashes($v));
+	            	if ($v != '') $v = addslashes($v);	            	
+	                if (!is_array($v)) $packed[] = sprintf("`%s` = '%s'", addslashes($k), $v);
 	            }
 	            
 	            if (!count($packed)) {
