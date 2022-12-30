@@ -154,6 +154,16 @@
         		        unset($data[$paramkey]);
         		    }
         		}
+
+        		//find parameters that doesnt exist in $data
+        		foreach ($paramsyntax as $key => $prm) {
+        			if ($prm['required']) {
+        				if (!isset($data[$key])) {
+		                    $this->paramerror = $this->doError(sprintf('required parameter "%s" was not found', $key));
+		                    return;        					
+        				}
+        			}
+        		}
         	}
 
 
@@ -317,7 +327,8 @@
         	        require-keys => <string> - comma separated list of array keys that need to exist
             */
             
-            function doArrayParameterTypeTest(&$input, $parameter, $ps = []) {
+            function doArrayParameterTypeTest(&$input, $parameter, $ps = [])
+            {
                 if (!is_array($input) || empty($input)) {
                     if (isset($ps['default'])) {
                         $input = json_decode($ps['default'], 1);
