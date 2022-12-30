@@ -138,7 +138,7 @@
         		                $this->doEnumParameterTypeTest($data[$paramkey], $paramkey, $ps);
         		            }
         		            
-        		            if ($t->paramerror) return;
+        		            if (!empty($this->paramerror)) return;
         		            
                         } else {
                             //move parameter to unexpected parameters list
@@ -208,6 +208,11 @@
                 ]);
                 
                 return $result;
+            }
+
+
+            function hasElements($input) {
+            	return (is_array($input) && is_countable($input) && count($input));
             }
         
         
