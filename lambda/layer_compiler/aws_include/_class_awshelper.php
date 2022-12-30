@@ -443,6 +443,65 @@
         	    }            	    
         	    
         	}
+
+
+            /*
+                get the id row from provided parameters
+                
+                sample usage:
+                if ($err = $test->doExecute(${$output = 'fk_layer_id'}, [
+                    'command' => 'getIdFromQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_' . $aws_region . '_layers',
+                        'fields' => [
+                            'aws_layer_name' => $layername
+                        ],
+                        'keycarrier' => 'aws_layer_id',
+                        'singleexpected' => 1,
+                        'connection' => $conn
+                    ]
+                ])) return $helper->doError($err);                
+            */
+            protected function __getIdFromQuery($data) {
+                //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
+				if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
+	            if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
+	            if (!count($data[$tf = 'fields'])) return $this->doError('array is not defined: [' . $tf . ']');
+	            
+	            foreach ($data['fields'] as $key => $value) {
+	                $wherequery[] = sprintf('`%s` = \'%s\'', $key, $value);
+	            }
+	            $where = implode(' AND ', $wherequery);
+	            if (!$where) {
+	                return $this->doError('where clause is not defined for count query.');
+	            }				
+	            
+	            $query = sprintf("SELECT * FROM `%s` WHERE %s", $data['tablename'], $where);
+	            if (!$res = $data['connection']->query($query)) {
+	                return $this->doError($data['connection']->error);
+	            }
+	            
+	            if (empty(mysqli_num_rows($res))) {
+	                return $this->doError('no records retrieved from $awshelper->getIdFromQuery()');
+	            }
+	            
+	            if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
+	                return $this->doError(sprintf('$awshelper->getIdFromQuery() returned more than one row: (%d rows)', mysqli_num_rows($res)));
+	            }
+	            
+	            $row = mysqli_fetch_assoc($res);
+	            if (!isset($row[$data['keycarrier']])) {
+	                return $this->doError(sprintf('$awshelper->getIdFromQuery() result didnt consist field %s', $data['keycarrier']));
+	            }
+	            
+	            $value = $row[$data['keycarrier']];
+	            if (!$value) {
+	                return $this->doError(sprintf('$awshelper->getIdFromQuery() result returned nothing', $data['keycarrier']));
+	            }
+	            
+                return $this->doOk($value);
+            }
+        	
         	
         	//perform type test to string.
         	/*
