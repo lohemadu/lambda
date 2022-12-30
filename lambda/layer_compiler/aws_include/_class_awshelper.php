@@ -322,10 +322,18 @@
                     if (isset($ps['default'])) {
                         $input = json_decode($ps['default'], 1);
                     } else {
-                    	$this->paramerror = $this->doError(sprintf('array $data[%s] is expected but not found', $parameter, $key));
-                    	return;
+                    	if (isset($ps['required'])) {
+                    		$this->paramerror = $this->doError(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                    		return;
+                    	}
                     }
-                    if (!is_array($input) || empty($input)) {
+                    if (!is_array($input) || empty($input)) 
+                    {
+						if (isset($ps['required'])) 
+						{
+                    		$this->paramerror = $this->doError(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                    		return;
+                    	}
                         $input = [];
                     }
                 }
