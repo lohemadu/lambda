@@ -4,7 +4,9 @@
       {
         "path": "/lambda/layer_compiler/aws_include/_class_awshelper.php",
         "destination": "includes/_class_awshelper.php"
-      },
+      }
+    ],
+    "aws-php-include-mysql": [
       {
         "path": "/lambda/layer_compiler/aws_include/class_mysql.php",
         "destination": "includes/class_mysql.php"
