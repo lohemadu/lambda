@@ -774,9 +774,9 @@
                 if ($result['status'] == 'success')
                 {
                     if (isset($result['data']['result']))
-                        return $this->doError($result['data']['result']);
+                        return $this->doOk($result['data']['result']);
                     if (isset($result['data']['records']))
-                        return $this->doError($result['data']['records']);
+                        return $this->doOk($result['data']['records']);
                 }
 				
 				return $this->doError('parse error from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1));
