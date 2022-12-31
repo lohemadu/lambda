@@ -72,7 +72,7 @@
                         );                            
                     }                    
                 }
-                
+
 
         		//metadata skeleton
         		$this->metadata = [
@@ -846,10 +846,6 @@
                 
                 return $this->doOk($result);
             }
-
-		}
-
-
 
 		}
 	}
