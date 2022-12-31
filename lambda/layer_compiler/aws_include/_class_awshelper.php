@@ -326,9 +326,6 @@
                     
                     $input = $ps['default'];
                 }
-                
-                
-
             }                
             
             //perform type test to array.
@@ -846,6 +843,9 @@
                 
                 return $this->doOk($result);
             }
+
+
+
 
 		}
 	}
