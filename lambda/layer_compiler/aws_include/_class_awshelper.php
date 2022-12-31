@@ -6,7 +6,7 @@
 
 	if (!class_exists('awshelper'))
 	{
-		class awshelper 
+		class awshelper
 		{			
         	var $error_bad_request = 400;
         	var $success_status = 200;
@@ -163,7 +163,7 @@
         		if (is_array($paramsyntax))
         		{
             		foreach ($paramsyntax as $key => $prm) {
-            			if ($prm['required']) {
+            			if (isset($prm['required']) && !empty($prm['required'])) {
             				if (!isset($data[$key])) {
     		                    $this->paramerror = $this->doError(sprintf('required parameter "%s" was not found', $key));
     		                    return;        					
@@ -708,6 +708,79 @@
 
 	            return $this->doOk($query);
 			}
+			
+			/*
+			    function is calling AWS API Request based by endpoint path (/aws/layers/refresh)
+
+                sample usage:
+                
+                    if ($err = $helper->doExecute(${$output = 'response'}, [
+                        'command' => 'doAWSAPIRequest',
+                        'parameters' => [
+                            'region' => $aws_region,
+                            'endpoint' => '/aws/lambda/layer/versions/pull/list',
+                            'connection' => $conn,
+                        ]
+                    ])) return $helper->doError($err);                 
+			*/
+			protected function __doAWSAPIRequest($data) 
+			{
+			    //we replace this later
+				if (empty($data[$tf = 'endpoint'])) {
+				    return $this->doError(sprintf('required parameter is missing: [ %s ]', $tf));	
+				}
+				if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
+				
+				//get url for the function
+                $err = $this->doExecute(${$output = 'function_url'}, [
+                    'command' => 'getIdFromQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_' . $data['region'] . '_functions',
+                        'fields' => [
+                            'description' => $data['endpoint'],
+                            'region' => $data['region']
+                        ],
+                        'keycarrier' => 'function_url',
+                        'singleexpected' => 1,
+                        'connection' => $data['connection']
+                    ]
+                ]);
+                
+                if (!$function_url || $err) {
+                    return $this->doError(sprintf('Error 404: API endpoint %s not found', $data['endpoint']));
+                }
+
+                $ch = curl_init();
+                
+                curl_setopt_array($ch, [
+                  CURLOPT_URL => $function_url, 
+                  CURLOPT_RETURNTRANSFER => true,
+                  CURLOPT_TIMEOUT => 0,
+                  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                  CURLOPT_CUSTOMREQUEST => 'POST',
+                  CURLOPT_POSTFIELDS => json_encode($data['payload']),
+                  CURLOPT_HTTPHEADER => ['Content-Type: application/json']
+                ]);                
+                
+                $result = curl_exec($ch);
+                
+                curl_close($ch);
+                
+                $result = json_decode($result, 1);
+                
+                if ($result['status'] == 'error') {
+                    return $this->doError($result['data']['message'] . ' Returned result from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1));
+                } else
+                if ($result['status'] == 'success')
+                {
+                    if (isset($result['data']['result']))
+                        return $this->doError($result['data']['result']);
+                    if (isset($result['data']['records']))
+                        return $this->doError($result['data']['records']);
+                }
+				
+				return $this->doError('parse error from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1));
+			}
 
 
 			/*
@@ -845,9 +918,6 @@
                 
                 return $this->doOk($result);
             }
-
-
-
 
 		}
 	}
