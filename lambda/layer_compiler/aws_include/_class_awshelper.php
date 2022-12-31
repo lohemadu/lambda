@@ -775,11 +775,13 @@
                 {
                     if (isset($result['data']['result']))
                         return $this->doOk($result['data']['result']);
-                    if (isset($result['data']['records']))
+                    else if (isset($result['data']['records']))
                         return $this->doOk($result['data']['records']);
+                    else return $result['data'];
+
                 }
 				
-				return $this->doError('parse error from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1));
+				return $this->doError('parse error from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1) . '<br>result: ' . print_r($result, 1));
 			}
 
 
