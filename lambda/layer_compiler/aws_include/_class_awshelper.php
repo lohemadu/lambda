@@ -11,18 +11,22 @@
         	var $error_bad_request = 400;
         	var $success_status = 200;
         
-        	public $version;
-        	public $metadata;
-        	public $method;
-        	public $paramerror = false;
+        	public $version; //this file version
+        	public $metadata; //execution related metadata
+        	public $method; // POST | GET        	
+
+        	//request related class variables
         	public $aws_domainprefix;
         	public $aws_region;
         	public $aws_function_url;
         	public $aws_requestid;
+
+			//variable holder to set execution errors
+        	public $paramerror = false;
         
         	function __construct(&$data, $paramsyntax = NULL)
         	{ 
-        	    $this->version = 1;
+        	    $this->version = '1.1.0';
 
         	    if (isset($data['headers']['host'])) 
         	    {
@@ -66,9 +70,9 @@
                         return $this->paramerror = $this->doError(
                             sprintf('Method %s is not Allowed.', $this->method)
                         );                            
-                    }
-                    
+                    }                    
                 }
+                
 
         		//metadata skeleton
         		$this->metadata = [
@@ -156,13 +160,16 @@
         		}
 
         		//find parameters that doesnt exist in $data
-        		foreach ($paramsyntax as $key => $prm) {
-        			if ($prm['required']) {
-        				if (!isset($data[$key])) {
-		                    $this->paramerror = $this->doError(sprintf('required parameter "%s" was not found', $key));
-		                    return;        					
-        				}
-        			}
+        		if (is_array($paramsyntax))
+        		{
+            		foreach ($paramsyntax as $key => $prm) {
+            			if ($prm['required']) {
+            				if (!isset($data[$key])) {
+    		                    $this->paramerror = $this->doError(sprintf('required parameter "%s" was not found', $key));
+    		                    return;        					
+            				}
+            			}
+            		}
         		}
         	}
 
@@ -788,6 +795,59 @@
 	                return $this->doOk('new recordset inserted');
 	            }
 	        }
+	        
+	        
+            //get all records from the sql query
+            /*
+                sample usage:
+                if ($err = $helper->doExecute(${$output = 'result'}, [
+                    'command' => 'getQueryResultRecordset',
+                    'parameters' => [
+                        'query' => $query,
+                        'keyholder' => 'function_name'
+                        'connection' => $conn
+                    ]
+                ])) return $helper->doError($err);
+            */
+            
+            private function __getQueryResultRecordset($data) {
+                if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'keyholder']) return $this->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'query']) return $this->doError('required parameter missing: [' . $tf . ']');
+                
+                if (!$res = $data['connection']->query($data['query'])) {
+                    return $this->doError($data['connection']->error);
+                }
+                
+                $result = [];
+                
+                //no records return
+                if (!mysqli_num_rows($res)) {
+                    if (isset($data['no-records-allowed']) && $data['no-records-allowed'] == false) {
+                        return $this->doError('query returned zero results');
+                    } else {
+                        return $this->doOk('no records found.');
+                    }                    
+                }
+                
+                while ($row = mysqli_fetch_assoc($res))
+                {
+                    //no keyholder field in resultset
+                    if (!isset($row[$data['keyholder']])) {
+                        return $this->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
+                    }
+                    
+                    if (!empty($result[$row[$data['keyholder']]])) {
+                        return $this->doError(sprintf('keyholder "%s" with value "%s" is already existing in result. please choose unique id from resultset: [ %s ]', $data['keyholder'], $row[$data['keyholder']], implode(' | ', array_keys($row) )));
+                    }
+                    
+                    $result[$row[$data['keyholder']]] = $row;
+                }
+                
+                return $this->doOk($result);
+            }
+
+		}
 
 
 
