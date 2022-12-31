@@ -210,7 +210,8 @@
                         [
                             'status' => "success",
                             'data' => $data,
-                            'timestamp' => time()
+                            'timestamp' => time(),
+                            '@metadata' => $this->metadata
                         ], JSON_FORCE_OBJECT),
                 ]);
                 
@@ -253,7 +254,8 @@
                         [
                             'status' => "error",
                             'data' => $data,
-                            'timestamp' => time()
+                            'timestamp' => time(),
+                            '@metadata' => $this->metadata
                         ], JSON_FORCE_OBJECT),
                 ]);
                 
