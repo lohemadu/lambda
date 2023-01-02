@@ -10,40 +10,85 @@
 		{			
         	var $error_bad_request = 400;
         	var $success_status = 200;
+        	var $path_configfile = '/opt/config/configuration.json';
         
         	public $version; //this file version
         	public $metadata; //execution related metadata
         	public $method; // POST | GET        	
-
-        	//request related class variables
         	public $aws_domainprefix;
         	public $aws_region;
         	public $aws_function_url;
         	public $aws_requestid;
 
+        	private $config;
+        	private $salt = "TjZpB8609WkpKG5ftdvQ";
+
 			//variable holder to set execution errors
         	public $paramerror = false;
         
-        	function __construct(&$data, $paramsyntax = NULL)
-        	{ 
+        	function __construct(&$data, $paramsyntax = [])
+        	{
+        	    //set version for informational purposes
         	    $this->version = '1.1.0';
+        	    
+        		//metadata skeleton
+        		$this->metadata = [
+        			'caller' => [
+        			    'function' => debug_backtrace()[1]['function']
+                    ],
+                    'timer' => [
+                        'started_at_microtime' => intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3))
+                    ],
+                    'paramsyntax' => $paramsyntax,
+                    'params' => [
+                        'accepted' => [],
+                        'unexpected' => [],
+                        'ignored' => 0
+                    ],
+                    'config' => [],
+                    'connections' => [],
+                    'modules' => []
+        		];        	    
+        	    
+        	    //load global config
+        	    $this->metadata['config']['config_loaded'] = 0;
+        	    if (file_exists($this->path_configfile)) 
+        	    {
+        	        if ($config = file_get_contents($this->path_configfile)) 
+        	        {
+                        $config = json_decode($config, 1);
+                        if (isset($config) && is_array($config) && count($config)) 
+                        {
+                	        //assign config to private variable
+                	        $this->config = $config;                            
+                            
+                            $this->metadata['config']['config_loaded'] = 1;
+                            $elements = '';
+                            foreach ($config as $k => $v) {
+                                if (is_array($v)) 
+                                    $elements .= ' | ' . $k . '(array)';
+                                else
+                                    $elements .= ' | ' . $k . '';
+                            }
+                            $this->metadata['config']['keys'] = trim($elements, ' |');
+                            unset($elements);
+                        }
+        	        }
+        	    }
 
         	    if (isset($data['headers']['host'])) 
         	    {
         	    	//environment variables
         	    	$hostparts = explode('.', $data['headers']['host']);
 		            $this->aws_domainprefix = $hostparts[0];
-		            $this->aws_region = $hostparts[2];
 		            $this->aws_function_url = $data['headers']['host'];
 		            $this->aws_requestid = $data['requestContext']['requestId'];
-        	    } else {
-			        if (file_exists($inc = '/var/task/src/credentials.php')) {
-			        	include($inc);
-			            $this->aws_region = $aws_region;
-			        }
         	    }
-       	    
-        	    //retrieve body and encode it
+        	    
+        	    //load AWS region
+        	    $this->aws_region = $this->config['aws']['aws_region'];
+                
+        	    //retrieve body and encode it depending if its POST or GET
                 if (!empty($data['requestContext']['http']['method'])) 
                 {
                     $this->method = $data['requestContext']['http']['method'];
@@ -72,23 +117,6 @@
                         );                            
                     }                    
                 }
-
-
-        		//metadata skeleton
-        		$this->metadata = [
-        			'caller' => [
-        			    'function' => debug_backtrace()[1]['function']
-                    ],
-                    'timer' => [
-                        'started_at_microtime' => intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3))
-                    ],
-                    'paramsyntax' => $paramsyntax,
-                    'params' => [
-                        'accepted' => [],
-                        'unexpected' => [],
-                        'ignored' => 0
-                    ]
-        		];
         		
         		//loop and clean parameters
         		foreach ($data as $paramkey => $paramvalue)
@@ -172,7 +200,35 @@
             		}
         		}
         	}
-
+        	
+        	function paramDecrypt($data) {
+        	    if (!isset($data)) return $data;
+        	    
+        	    if (is_array($data)) {
+        	        if (count($data)) {
+        	            if (isset($data['is_crypted'])) {
+        	                if (isset($data['value'])) {
+        	                    return $this->strDecrypt($data['value']);
+        	                }
+        	            }
+        	        }
+        	    }
+        	    return $data;
+        	}
+        	
+        	function strDecrypt($data) {
+        	    $output = 'result';
+        	    if ($err = $this->doExecute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->doError($err); return; }
+        	    return $result;
+        	}
+        	
+        	
+        	function strEncrypt($data) {
+        	    $output = 'result';
+        	    if ($err = $this->doExecute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->doError($err); return; }
+        	    return $result;
+        	}
+        	
 
         	/* Result is returning JSON encoded successful response with statusCode 200 and Body */
         	function doOk($data = '', $pagination = []) 
@@ -577,17 +633,70 @@
 			*/			
 			function doExecute(&$successresult, $data) 
 			{
-			    if (!empty($data['command'])) $data['command'] = '__' . $data['command'];
+			    if (!empty($data['command'])) $command = '__' . $data['command'];
 			    
-	        	if (!method_exists($this, $data['command']))
-	        	    return 'method $' . get_class($this) . '->' . $data['command'] . '() does not exist';
-			    
-			    $successresult = NULL;
-			    $result = json_decode(call_user_func_array(array($this, $data['command']), array($data['parameters'])), 1);
-			    if (empty($result)) {
-			        return 'function returned without clear result';
+			    //see if we need to establish or maintain a database connection
+			    if (isset($data['parameters']['connection']) && ($data['command'] != 'doEstablishSQLConnection'))
+			    {
+			        if ($err = $this->doExecute(${$output = 'conn'}, [
+                        'command' => 'doEstablishSQLConnection', 
+                        'parameters' => [
+                            'connection' => $data['parameters']['connection']
+                        ]
+                    ])) { return $err; }
 			    }
 			    
+	        	if (!method_exists($this, $command)) 
+	        	{
+	        	    $commandclass = explode('_', $data['command']);
+	        	    
+	        	    if (isset($commandclass[0]) && !empty($commandclass[0]) && (preg_match("/^[a-z]+$/", $commandclass[0]))) 
+	        	    {
+	        	        //function requested was in format <class>_<function>
+	        	        $classfile = 'class_' . ($module = $commandclass[0]) . '.php';
+	        	        
+	        	        if (!is_object($this->metadata['modules'][$module]))
+	        	        {
+    	        	        //attemt to create class
+    	        	        $includefile = '';
+    	        	        
+    	        	        if (file_exists($includefile = $this->config['sourcedir'] . $classfile)) { } else 
+    	        	        if (file_exists($includefile = $this->config['workdir'] . $classfile)) { } else 
+    	        	        if (file_exists($includefile = $this->config['includedir'] . $classfile)) { }
+    	        	        
+    	        	        if (!empty($includefile) && !empty($module))
+    	        	        {
+                                try {
+                                    require_once($includefile);
+                                    $this->metadata['modules'][$module] = new $module;
+                                }
+                                catch(exception $e) {
+                                    return 'error occured when including class file: ' . print_r($e, 1);
+                                }
+    	        	        }
+	        	        }
+	        	        
+	        	        if (!method_exists($this->metadata['modules'][$module], $command)) {
+	        	            return 'method $' . get_class($this->metadata['modules'][$module]) . '->' . $command . '() does not exist';
+	        	        }
+	        	        
+	        	        //we call method from sublaying class
+        			    $result = json_decode(call_user_func_array(array($this->metadata['modules'][$module], $command), array($data['parameters'], $this)), 1);
+        			    if (empty($result)) {
+        			        return 'function returned without clear result';
+        			    }	        	        
+	        	    }
+	        	} else {
+	        	    //we call method from this class
+    			    $result = json_decode(call_user_func_array(array($this, $command), array($data['parameters'])), 1);
+    			    if (empty($result)) {
+    			        return 'function returned without clear result';
+    			    }	        	    
+	        	}
+			    
+			    $successresult = NULL;
+			    
+                //decode body and send result
 			    $result['body'] = json_decode($result['body'], 1);
 			    
 			    if ($result['body']['status'] == 'success')
@@ -606,7 +715,63 @@
 			    } else {
 			        return $result['body']['data']['message'];
 			    }
-			} 
+			}
+			
+			
+			/* encrypting string with key and salt */
+			function __doStringEncrypt($data) 
+			{
+			    if (empty($data['input'])) {
+			        return $this->doError('noting to encrypt');
+			    }
+			    
+			    if (empty($this->salt)) {
+			        return $this->doError('encryption SALT is not defined');
+			    }
+			    
+			    if (empty($this->config['encryption_key'])) {
+			        return $this->doError('encryption key in config file is not set');
+			    }
+			    
+			    $encrypt_method = "AES-256-CBC";
+			    $key = hash('sha256', $this->config['encryption_key']);
+			    
+                // iv - encrypt method AES-256-CBC expects 16 bytes - else you will get a warning
+                $iv = substr(hash('sha256', $this->salt), 0, 16);
+                
+                $output = openssl_encrypt($data['input'], $encrypt_method, $key, 0, $iv);
+                $output = base64_encode($output);
+                
+                return $this->doOk($output);
+			}
+
+
+
+			/* encrypting string with key and salt */
+			function __doStringDecrypt($data) 
+			{
+			    if (empty($data['input'])) {
+			        return $helper->doError('noting to decrypt');
+			    }
+			    
+			    if (empty($this->salt)) {
+			        return $this->doError('decryption SALT is not defined');
+			    }
+			    
+			    if (empty($this->config['encryption_key'])) {
+			        return $this->doError('decryption key in config file is not set');
+			    }
+			    
+			    $encrypt_method = "AES-256-CBC";
+			    $key = hash('sha256', $this->config['encryption_key']);
+			    
+                // iv - encrypt method AES-256-CBC expects 16 bytes - else you will get a warning
+                $iv = substr(hash('sha256', $this->salt), 0, 16);
+                
+                $output = openssl_decrypt(base64_decode($data['input']), $encrypt_method, $key, 0, $iv);
+                
+                return $this->doOk($output);
+			}
 
 
 			/*
@@ -754,8 +919,7 @@
                 
                 curl_setopt_array($ch, [
                   CURLOPT_URL => $function_url, 
-                  CURLOPT_RETURNTRANSFER => true,
-                  CURLOPT_TIMEOUT => 0,
+                  CURLOPT_RETURNTRANSFER => 1,
                   CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                   CURLOPT_CUSTOMREQUEST => 'POST',
                   CURLOPT_POSTFIELDS => json_encode($data['payload']),
@@ -763,13 +927,24 @@
                 ]);                
                 
                 $result = curl_exec($ch);
+                if (curl_exec($ch) === false) {
+                    return $this->doError(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
+                }                
                 
                 curl_close($ch);
-                
                 $result = json_decode($result, 1);
                 
                 if ($result['status'] == 'error') {
-                    return $this->doError($result['data']['message'] . ' Returned result from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1));
+                    $message = "
+                    Caller Function: %s
+                    Message: %s
+                    
+                    URL Called: %s
+                    EndPoint Called: %s
+                    
+                    Payload: %s";
+                    
+                    return $this->doError(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
                 } else
                 if ($result['status'] == 'success')
                 {
@@ -777,11 +952,10 @@
                         return $this->doOk($result['data']['result']);
                     else if (isset($result['data']['records']))
                         return $this->doOk($result['data']['records']);
-                    else return $result['data'];
-
+                    else return $this->doOk($result['data']);
                 }
-				
-				return $this->doError('parse error from doAWSAPIRequest->' . $data['endpoint'] . '<br><br>payload: ' . print_r($data['payload'], 1) . '<br>result: ' . print_r($result, 1));
+                
+                return $this->doError(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
 			}
 
 
@@ -869,56 +1043,59 @@
 	                return $this->doOk('new recordset inserted');
 	            }
 	        }
-	        
-	        
-            //get all records from the sql query
-            /*
-                sample usage:
-                if ($err = $helper->doExecute(${$output = 'result'}, [
-                    'command' => 'getQueryResultRecordset',
-                    'parameters' => [
-                        'query' => $query,
-                        'keyholder' => 'function_name'
-                        'connection' => $conn
-                    ]
-                ])) return $helper->doError($err);
-            */
-            
-            private function __getQueryResultRecordset($data) {
-                if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'keyholder']) return $this->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'query']) return $this->doError('required parameter missing: [' . $tf . ']');
-                
-                if (!$res = $data['connection']->query($data['query'])) {
-                    return $this->doError($data['connection']->error);
+
+            private function __doEstablishSQLConnection($data) 
+            {
+                if (!$data['connection']) {
+                    return $this->doError('no connection parameter defined');
                 }
                 
-                $result = [];
-                
-                //no records return
-                if (!mysqli_num_rows($res)) {
-                    if (isset($data['no-records-allowed']) && $data['no-records-allowed'] == false) {
-                        return $this->doError('query returned zero results');
-                    } else {
-                        return $this->doOk('no records found.');
-                    }                    
+                if (!$this->config['connections'][$data['connection']]) {
+                    return $this->doError(sprintf('config doesnt provide $config[connections][%s]', $data['connection']));
                 }
                 
-                while ($row = mysqli_fetch_assoc($res))
-                {
-                    //no keyholder field in resultset
-                    if (!isset($row[$data['keyholder']])) {
-                        return $this->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
-                    }
-                    
-                    if (!empty($result[$row[$data['keyholder']]])) {
-                        return $this->doError(sprintf('keyholder "%s" with value "%s" is already existing in result. please choose unique id from resultset: [ %s ]', $data['keyholder'], $row[$data['keyholder']], implode(' | ', array_keys($row) )));
-                    }
-                    
-                    $result[$row[$data['keyholder']]] = $row;
+                if (empty($this->config['connections'][$data['connection']]['hostname'])) {
+                    return $this->doError(sprintf('config doesnt provide $config[connections][%s][hostname]', $data['connection']));
                 }
                 
-                return $this->doOk($result);
+                if (empty($this->config['connections'][$data['connection']]['username'])) {
+                    return $this->doError(sprintf('config doesnt provide $config[connections][%s][username]', $data['connection']));
+                }
+                
+                if (empty($this->config['connections'][$data['connection']]['password'])) {
+                    return $this->doError(sprintf('config doesnt provide $config[connections][%s][username]', $data['password']));
+                }
+                
+                $cs = [
+                    'hostname' => $this->paramDecrypt($this->config['connections'][$data['connection']]['hostname']),
+                    'username' => $this->paramDecrypt($this->config['connections'][$data['connection']]['username']),
+                    'password' => $this->paramDecrypt($this->config['connections'][$data['connection']]['password']),
+                    'database' => $this->paramDecrypt($this->config['connections'][$data['connection']]['database'])
+                ];
+                
+                mysqli_report(MYSQLI_REPORT_ERROR);
+                
+                if (!$conn = mysqli_connect(
+                    $cs['hostname'], 
+                    $cs['username'], 
+                    $cs['password'], 
+                    $cs['database']
+                )) {
+                    return $this->doError(sprintf('unable to set MySQL connection [%s] %s', $data['connection'], $conn->error));
+                }
+                
+                if (!is_object($conn)) {
+                    return $this->doError('$conn from establisConnection is not mysql class');
+                }
+                
+                $this->metadata['connections'][$data['connection']] = [
+                    'established' => true,
+                    'object' => $conn
+                ];
+                
+                $this->conn[$data['connection']] = $conn;
+                
+                return $this->doOk(sprintf('connection established and can be found @ $helper->conn[%s]', $data['connection']));
             }
 
 		}
