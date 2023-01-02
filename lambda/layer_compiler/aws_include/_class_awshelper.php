@@ -480,7 +480,8 @@
         	        $this->paramerror = $this->doError(sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
         	    }   
         	    
-        	    $input = sprintf('%b', $ps['default']);
+        	    if ($ps['default'] != '')
+        	    	$input = sprintf('%b', $ps['default']);
         	}
             
         	//perform type test to integer.
