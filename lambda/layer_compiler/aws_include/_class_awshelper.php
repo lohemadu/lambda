@@ -665,7 +665,7 @@
 	        	        //function requested was in format <class>_<function>
 	        	        $classfile = 'class_' . ($module = $commandclass[0]) . '.php';
 	        	        
-	        	        if (!is_object($this->metadata['modules'][$module]))
+	        	        if (empty($this->metadata['modules'][$module]) || !is_object($this->metadata['modules'][$module]))
 	        	        {
     	        	        //attemt to create class
     	        	        $includefile = '';
@@ -721,6 +721,9 @@
 			            $successresult = $result['body']['data']['records'];
 			            return false;
 			        }
+
+			        $successresult = $result['body']['data']['success'];
+			        return false;
 
 			    } else {
 			        return $result['body']['data']['message'];
