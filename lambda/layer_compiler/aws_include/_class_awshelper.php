@@ -916,6 +916,9 @@
                 if (empty($data[$tf = 'endpoint'])) {
                     return $this->doError(sprintf('required parameter is missing: [ %s ]', $tf));   
                 }
+                if (empty($data[$tf = 'region'])) {
+                    return $this->doError(sprintf('required parameter is missing: [ %s ]', $tf));   
+                }                
                 if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
                 
                 //get url for the function
