@@ -139,8 +139,9 @@
                         if (isset($paramsyntax[$paramkey])) 
                         {
         		            //param formatting and checks that dont halt the execution
-        		            if (isset($paramsyntax[$paramkey]['type']) && in_array($paramsyntax[$paramkey]['type'], ['integer', 'boolean', 'string', 'array', 'enum']))
-        		            	$this->metadata['params']['possible'][$paramkey] = $paramsyntax[$paramkey]['type'];	
+        		            if (isset($paramsyntax[$paramkey]['type']) && 
+        		            	in_array($paramsyntax[$paramkey]['type'], ['integer', 'boolean', 'string', 'array', 'enum']))
+        		            		$this->metadata['params']['possible'][$paramkey] = $paramsyntax[$paramkey]['type'];	
 
         		            $this->metadata['params']['accepted'][$paramkey] = 1;
         		            
