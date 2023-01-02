@@ -42,7 +42,7 @@
 			    
                 //no records return
                 if (!mysqli_num_rows($res)) {
-                    if (isset($data['no-rows-error']) && $data['no-rows-error'] == false) {
+                    if (isset($data['no-rows-error']) && $data['no-rows-error'] == true) {
                         return $helper->doError('query returned zero results');
                     } else {
                         return $helper->doOk([]);
