@@ -138,6 +138,10 @@
                         //if parameter is accepted or unexpected
                         if (isset($paramsyntax[$paramkey])) 
                         {
+        		            //param formatting and checks that dont halt the execution
+        		            if (in_array($paramsyntax[$paramkey]['type'], ['integer', 'boolean', 'string', 'array', 'enum']))
+        		            	$this->metadata['params']['possible'][$paramkey] = $paramsyntax[$paramkey]['type'];	
+
         		            $this->metadata['params']['accepted'][$paramkey] = 1;
         		            
         		            $ps = $paramsyntax[$paramkey];
@@ -149,8 +153,6 @@
                                     sprintf('Required parameter syntax "type" not found for parameter "%s" or is not one of the following [ integer | boolean | string | array | enum ]', $paramkey)
                                 );
         		            }
-
-        		            $this->metadata['params']['possible'][$paramkey] = $ps['type'];
         		            
         		            if ($ps['type'] == 'integer') 
         		            {
