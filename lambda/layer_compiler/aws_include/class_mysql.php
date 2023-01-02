@@ -45,7 +45,7 @@
                     if (isset($data['no-rows-error']) && $data['no-rows-error'] == true) {
                         return $helper->doError('query returned zero results');
                     } else {
-                        return $helper->doOk([]);
+                        return $helper->doOk(0);
                     }                    
                 }
                 
@@ -64,6 +64,51 @@
                 }
                 
                 return $helper->doOk($result);
+			}
+			
+			/* function is expecting single row with field "cnt" 
+			    sample usage:
+			    
+                $output = 'res';
+                if ($err = $helper->doExecute(${$output}, [
+                    'command' => 'mysql_doQuery',
+                    'parameters' => [
+                        'connection' => 'core',
+                        'query' => "select count(*) as `cnt` from `_aws_eu-north-1_functions`"
+                    ]
+                ])) return $helper->doError($err);
+                
+                return $helper->doError($res);			
+			*/
+			function __mysql_getCount($data, $helper)
+			{
+			    $data['keyholder'] = 'cnt';
+			    if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
+			    if (!$data[$tf = 'query']) return $this->doError('required parameter missing: [' . $tf . ']');
+			    
+			    //check if connection is established
+			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
+			        //connection not established... exit
+			        return $helper->doError('connection to database is not established: %s', $data['connection']);
+			    } else {
+			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
+			    }
+			    
+			    if (!$res = $conn->query($data['query'])) {
+			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+			    }
+			    
+			    if (!mysqli_num_rows($res)) {
+			        return $helper->doOk('0');
+			    }
+			    
+			    $row = mysqli_fetch_assoc($res);
+			    if (!isset($row[$data['keyholder']])) {
+			        return $helper->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
+			    }
+			    
+			    return $helper->doOk($row['cnt']);
+			    
 			}
 			
 		}

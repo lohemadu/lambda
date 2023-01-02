@@ -245,7 +245,7 @@
                 if (is_string($data)) $data = trim($data);
                 if (empty($data)) {
                     //return as a boolean
-                    $data = ['code' => $this->success_status, 'success' => 1];
+                    $data = ['code' => $this->success_status, 'success' => sprintf('%b', $data)];
                 } else
                 if (is_object($data)) {
                     $data = ['code' => $this->success_status, 'result' => $data];
@@ -480,8 +480,9 @@
         	        $this->paramerror = $this->doError(sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
         	    }   
         	    
-        	    if ($ps['default'] != '')
-        	    	$input = sprintf('%b', $ps['default']);
+        	    if (isset($ps['default']))
+        	        if (!empty($ps['default']))
+        	    	    $input = sprintf('%b', $ps['default']);
         	}
             
         	//perform type test to integer.
@@ -699,14 +700,14 @@
 	        	        
 	        	        //we call method from sublaying class
         			    $result = json_decode(call_user_func_array(array($this->metadata['modules'][$module], $command), array($data['parameters'], $this)), 1);
-        			    if (empty($result)) {
+        			    if ($result == '') {
         			        return 'function returned without clear result';
         			    }	        	        
 	        	    }
 	        	} else {
 	        	    //we call method from this class
     			    $result = json_decode(call_user_func_array(array($this, $command), array($data['parameters'])), 1);
-    			    if (empty($result)) {
+    			    if ($result == '') {
     			        return 'function returned without clear result';
     			    }	        	    
 	        	}
@@ -723,14 +724,16 @@
 			            $successresult = $result['body']['data']['result'];
 			            return false;
 			        }
-			        if (isset($result['body']['data']['records'])) 
+			        else if (isset($result['body']['data']['records'])) 
 			        {
 			            $successresult = $result['body']['data']['records'];
 			            return false;
 			        }
-
-			        $successresult = $result['body']['data']['success'];
-			        return false;
+			        else if (isset($result['body']['data']['success'])) 
+			        {
+                        $successresult = $result['body']['data']['success'];
+    			        return false;
+			        }
 
 			    } else {
 			        return $result['body']['data']['message'];
@@ -965,7 +968,8 @@
                     Payload: %s";
                     
                     return $this->doError(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
-                } else
+                }
+                else
                 if ($result['status'] == 'success')
                 {
                     if (isset($result['data']['result']))
