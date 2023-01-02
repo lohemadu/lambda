@@ -208,14 +208,14 @@
             }
             
             function paramDecrypt($data) {
-                if (!isset($data)) return $data;
+                if (!isset($data)) return 'EMPTY-STRING';
                 
                 if (is_array($data)) {
                     if (count($data)) {
                         if (isset($data['is_crypted'])) {
                             if (isset($data['value'])) {
                                 return $this->strDecrypt($data['value']);
-                            }
+                            } else return 'NO VALUE';
                         }
                     }
                 }
@@ -524,23 +524,7 @@
             }
 
 
-            /*
-                get the id row from provided parameters
-                
-                sample usage:
-                if ($err = $test->doExecute(${$output = 'fk_layer_id'}, [
-                    'command' => 'getIdFromQuery',
-                    'parameters' => [
-                        'tablename' => '_aws_' . $aws_region . '_layers',
-                        'fields' => [
-                            'aws_layer_name' => $layername
-                        ],
-                        'keycarrier' => 'aws_layer_id',
-                        'singleexpected' => 1,
-                        'connection' => $conn
-                    ]
-                ])) return $helper->doError($err);                
-            */
+
             protected function __getIdFromQuery($data) {
                 //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
                 if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
@@ -651,18 +635,23 @@
             function doExecute(&$successresult, $data) 
             {
                 if (!empty($data['command'])) $command = '__' . $data['command'];
+                else return sprintf('function command was not provided');
                 
                 //see if we need to establish or maintain a database connection
-                if (isset($data['parameters']['connection']) && ($data['command'] != 'doEstablishSQLConnection'))
+                if (
+                    isset($data['parameters']['connection']) && 
+                    !is_object($this->metadata['connections'][$data['parameters']['connection']]['object']) && 
+                    ($data['command'] != 'doEstablishSQLConnection')
+                )
                 {
                     if ($err = $this->doExecute(${$output = 'conn'}, [
                         'command' => 'doEstablishSQLConnection', 
                         'parameters' => [
                             'connection' => $data['parameters']['connection']
                         ]
-                    ])) { return $err; }
+                    ])) return $err;
                 }
-                
+
                 if (!method_exists($this, $command)) 
                 {
                     $commandclass = explode('_', $data['command']);
@@ -671,7 +660,6 @@
                     {
                         //function requested was in format <class>_<function>
                         $classfile = 'class_' . ($module = $commandclass[0]) . '.php';
-                        
                         if (empty($this->metadata['modules'][$module]) || !is_object($this->metadata['modules'][$module]))
                         {
                             //attemt to create class
@@ -702,8 +690,12 @@
                         if ($result == '') {
                             return 'function returned without clear result';
                         }                       
+                    } else {
+                        //unable to find the requested method from any of the classes
+                        return 'method $' . get_class($this) . '->' . $command . '() does not exist';
                     }
                 } else {
+
                     //we call method from this class
                     $result = json_decode(call_user_func_array(array($this, $command), array($data['parameters'])), 1);
                     if ($result == '') {
@@ -922,19 +914,24 @@
                 if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
                 
                 //get url for the function
-                $err = $this->doExecute(${$output = 'function_url'}, [
-                    'command' => 'getIdFromQuery',
+                if ($err = $this->doExecute(${$output = 'function_url'}, [
+                    'command' => 'mysql_getSingleCellValue',
                     'parameters' => [
                         'tablename' => '_aws_' . $data['region'] . '_functions',
-                        'fields' => [
+                        'where' => [
                             'description' => $data['endpoint'],
                             'region' => $data['region']
                         ],
-                        'keycarrier' => 'function_url',
+                        'column' => 'function_url',
                         'singleexpected' => 1,
-                        'connection' => $data['connection']
+                        'connection' => 'core'
                     ]
-                ]);
+                ])) { 
+                    if ($err == 'NULL') return $this->doError(sprintf('Unable to retrieve Amazon URL for Function %s', $data['endpoint']));
+                    else return $this->doError($err); 
+                }
+                
+                
                 
                 if (!$function_url || $err) {
                     return $this->doError(sprintf('Error 404: API endpoint %s not found', $data['endpoint']));
@@ -984,97 +981,18 @@
                 return $this->doError(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
             }
 
-
             /*
-                function will either update or delete the recordset
-
-                sample usage:
-
-                //enter or update row in _aws_layers_table
-                if ($err = $test->doExecute(${$output = 'query'}, [
-                    'command' => 'doBuildAndMakeInsertOrUpdateQuery',
-                    'parameters' => [
-                        'tablename' => '_aws_layers',
-                        'fields' => [
-                            'aws_layer_name' => 'my-layer',
-                            'version' => 12
-                        ],
-                        'keys' => [
-                            'aws_layer_name'
-                        ],
-                        'connection' => $conn
-                    ]
-                ])) return $helper->doError($err);              
+                function is establishing required connection based on the connection slug
             */
-            protected function __doBuildAndMakeInsertOrUpdateQuery($data)
-            {
-                
-                if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
-                if (!count($data[$tf = 'keys'])) return $this->doError('array is not defined: [' . $tf . ']');
-                
-                foreach ($data['keys'] as $void => $key) {
-                    if (!isset($data['fields'][$key])) return $this->doError('fields[' . $key . '] is not defined in input params');
-                    $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
-                }
-                $where = implode(' AND ', $wherequery);
-                if (!$where) {
-                    return $this->doError('where clause is not defined for count query.');
-                }
-                
-                /* depending on keys update or insert command will be chosen */
-                $countquery = sprintf("SELECT count(*) as `cnt` FROM `%s` WHERE %s", $data['tablename'], $where);
-                if (!$res = $data['connection']->query($countquery)) {
-                    return $this->doError($data['connection']->error);
-                }
-                
-                if (!mysqli_num_rows($res)) {
-                    return $this->doError('count query gave no rows, there should be exactly one');
-                }
-                
-                $count = ($row = mysqli_fetch_assoc($res))['cnt'];
-
-                if ($count) 
-                {
-                    //update record in dataset
-                    if ($err = $this->doExecute(${$output = 'query'}, [
-                        'command' => 'doBuildUpdateQuery',
-                        'parameters' => [
-                            'tablename' => $data['tablename'],
-                            'fields' => $data['fields'],
-                            'keys' => $data['keys']
-                        ]
-                    ])) return $this->doError($err);  
-
-                    if (!$success = $data['connection']->query($query)) {
-                        return $this->doError('update sql error: ' . $data['connection']->error);
-                    }
-                    
-                    return $this->doOk('recordset updated');
-                    
-                } else {
-                    
-                    //insert new record into dataset
-                    if ($err = $this->doExecute(${$output = 'query'}, [
-                        'command' => 'doBuildInsertQuery',
-                        'parameters' => [
-                            'tablename' => $data['tablename'],
-                            'fields' => $data['fields']
-                        ]
-                    ])) return $helper->doError($err);                      
-                    
-                    if (!$success = $data['connection']->query($query)) {
-                        return $this->doError('insert sql error: ' . $data['connection']->error);
-                    }
-                    
-                    return $this->doOk('new recordset inserted');
-                }
-            }
-
             private function __doEstablishSQLConnection($data) 
             {
                 if (!$data['connection']) {
                     return $this->doError('no connection parameter defined');
                 }
+                
+                if (isset($this->metadata['connections'][$data['connection']]['object'])) {
+                    return $this->doOk(sprintf('connection was already established and can be found @ $helper->conn[%s]', $data['connection']));
+                }                
                 
                 if (!$this->config['connections'][$data['connection']]) {
                     return $this->doError(sprintf('config doesnt provide $config[connections][%s]', $data['connection']));
@@ -1099,7 +1017,7 @@
                     'database' => $this->paramDecrypt($this->config['connections'][$data['connection']]['database'])
                 ];
                 
-                mysqli_report(MYSQLI_REPORT_ERROR);
+                mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT);
                 
                 if (!$conn = mysqli_connect(
                     $cs['hostname'], 
@@ -1107,7 +1025,7 @@
                     $cs['password'], 
                     $cs['database']
                 )) {
-                    return $this->doError(sprintf('unable to set MySQL connection [%s] %s', $data['connection'], $conn->error));
+                    return $this->doError(sprintf('unable to open MySQL connection [%s] %s', $data['connection'], print_r($cs, 1)));
                 }
                 
                 if (!is_object($conn)) {

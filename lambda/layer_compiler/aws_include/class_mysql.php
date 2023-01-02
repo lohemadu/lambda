@@ -108,6 +108,26 @@
 			    
 			}
 			
+            /*
+                function will either insret or update recordset
+
+                sample usage:
+                //enter or update row in _aws_layers_table
+                if ($err = $test->doExecute(${$output = 'query'}, [
+                    'command' => 'mysql_doInsertOrUpdate',
+                    'parameters' => [
+                        'tablename' => '_aws_layers',
+                        'fields' => [
+                            'aws_layer_name' => 'my-layer',
+                            'version' => 12
+                        ],
+                        'keys' => [
+                            'aws_layer_name'
+                        ],
+                        'connection' => $conn
+                    ]
+                ])) return $helper->doError($err);              
+            */			
 			function __mysql_doInsertOrUpdate($data, $helper)
 			{
 			    //check if connection is established
@@ -143,16 +163,26 @@
 			    }			    
 			    
                 return $helper->doOk(1);
-                /*
-                
-                
-                ON DUPLICATE KEY UPDATE `the_col` = "the_value";                
-                */
-			    
-			    
-			    return $helper->doError('welcome from function');
 			}
-			
+
+
+			/*
+                inserting a new record to table
+                sample usage:
+
+                if ($err = $helper->doExecute(${$output = 'query'}, [
+                    'command' => 'mysql_constructInsertQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_layers',
+                        'fields' => [
+                            'function_id' => 1,
+                            'function_data' => 'hello',
+                            'third' => 'yeah'
+                        ]
+                    ]
+                ])) return $helper->doError($err);
+                return $helper->doOk($query);
+            */			
 			function __mysql_constructInsertQuery($data, $helper) {
                 $packed = array();
                 foreach($data['fields'] as $k => $v) {
@@ -164,12 +194,34 @@
                 $query = "INSERT INTO `" . $data['tablename'] . "` (`" . implode('`, `', $key) . "`) " . "VALUES ('" . implode("', '", $val) . "')";
                 
                 //for mysql functions we use !!!NOW()!!!
-                //remove escaping
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
                 
                 return $helper->doOk($query);			    
 			}
 			
+
+            /*
+                function will update recordset based on given keys
+
+                sample usage:
+
+                if ($err = $helper->doExecute(${$output = 'query'}, [
+                    'command' => 'doBuildInsertQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_layers',
+                        'fields' => [
+                            'item_id' => 12,
+                            'fk_order_id' => 2,
+                            'item_contents' => 'some item'
+                        ],
+                        'keys' => [
+                            'item_id',
+                            'fk_order_id'
+                        ]
+                    ]
+                ])) return $helper->doError($err);
+                return $helper->doOk($query);
+            */
 			function __mysql_constructUpdateQuery($data, $helper) {
                 if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
                 
@@ -201,6 +253,76 @@
 
                 return $helper->doOk($query);				
 			}
+			
+            /*
+                get the id row from provided parameters
+                
+                sample usage:
+                if ($err = $test->doExecute(${$output = 'fk_layer_id'}, [
+                    'command' => 'getIdFromQuery',
+                    'parameters' => [
+                        'tablename' => '_aws_' . $aws_region . '_layers',
+                        'where' => [
+                            'aws_layer_name' => $layername
+                        ],
+                        'column' => 'aws_layer_id',
+                        'singleexpected' => 1,
+                        'connection' => 'core'
+                    ]
+                ])) return $helper->doError($err);                
+            */			
+			function __mysql_getSingleCellValue($data, $helper) {
+			    //check if connection is established
+			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
+			        return $helper->doError('connection to database is not established: %s', $data['connection']);
+			    } else {
+			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
+			    }
+			    
+                //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
+                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!count($data[$tf = 'where'])) return $helper->doError('array is not defined: [' . $tf . ']');
+                
+                if (!isset($data['column']) or $data['column'] == '') {
+                    return $helper->doError('"column" input parameter is not defined for $mysql->__mysql_getSingleCellValue()');
+                }
+                foreach ($data['where'] as $key => $value) {
+                    $wherequery[] = sprintf('`%s` = \'%s\'', $key, $value);
+                }
+                $where = implode(' AND ', $wherequery);
+                if (!$where) {
+                    return $helper->doError('where clause is not defined for count query.');
+                }
+                
+                $query = sprintf("SELECT * FROM `%s` WHERE %s", $data['tablename'], $where);
+
+                if (!$res = $conn->query($query)) {
+                    return $helper->doError($conn->error);
+                }
+                
+                if (empty(mysqli_num_rows($res))) {
+                    return $helper->doError('no records retrieved from $mysql->__mysql_getSingleCellValue()');
+                }
+                
+                if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
+                    return $helper->doError(sprintf('$mysql->__mysql_getSingleCellValue() returned more than one row: (%d rows)', mysqli_num_rows($res)));
+                }
+                
+                $row = mysqli_fetch_assoc($res);
+                
+                if (!array_key_exists($data['column'], $row)) {
+                    return $helper->doError(sprintf('$mysql->__mysql_getSingleCellValue() result didnt consist field %s [ %s ]', $data['column'], implode(' | ', array_key_exists($row))));
+                }
+                
+                $value = $row[$data['column']];
+                if ($value == '') {
+                    return $helper->doError('NULL');
+                }
+                
+                return $helper->doOk($value);			    
+			}
+			
 			
 		}
 	}
