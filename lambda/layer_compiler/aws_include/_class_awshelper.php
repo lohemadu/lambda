@@ -41,6 +41,7 @@
                     ],
                     'paramsyntax' => $paramsyntax,
                     'params' => [
+                    	'possible' => [],
                         'accepted' => [],
                         'unexpected' => [],
                         'ignored' => 0
@@ -148,6 +149,8 @@
                                     sprintf('Required parameter syntax "type" not found for parameter "%s" or is not one of the following [ integer | boolean | string | array | enum ]', $paramkey)
                                 );
         		            }
+
+        		            $this->metadata['params']['possible'][$paramkey] = $ps['type'];
         		            
         		            if ($ps['type'] == 'integer') 
         		            {
