@@ -274,6 +274,16 @@
                 return $result;
             }
 
+            function getConfig($path) {
+                if (empty($path)) return '';
+                $paths = explode('->', $path);
+                
+                $itens = $this->config;
+                foreach($paths as $ndx) {
+                    $itens = $itens[$ndx];
+                }
+                return $this->paramDecrypt($itens);
+            }
 
             function hasElements($input) {
             	return (is_array($input) && is_countable($input) && count($input));
