@@ -26,7 +26,7 @@
             //variable holder to set execution errors
             public $paramerror = false;
         
-            function __construct(&$data, $paramsyntax = [])
+            function __construct(&$data, $paramsyntax = [], $config = [])
             {
                 //set version for informational purposes
                 $this->version = '1.1.0';
@@ -34,7 +34,7 @@
                 //metadata skeleton
                 $this->metadata = [
                     'caller' => [
-                        'function' => debug_backtrace()[1]['function']
+                        'function' => debug_backtrace()[1]['function'] ?? 'direct'
                     ],
                     'timer' => [
                         'started_at_microtime' => intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3))
@@ -50,28 +50,37 @@
                     'modules' => []
                 ];              
                 
-                //load global config
-                $this->metadata['config']['config_loaded'] = 0;
-                if (file_exists($this->path_configfile)) 
+                //for provided config we use provide one
+                if (isset($config) && is_array($config) && count($config))
                 {
-                    if ($config = file_get_contents($this->path_configfile)) 
+                    $this->config = $config;
+                    $this->metadata['config']['config_loaded'] = 1;
+                }
+                else
+                {
+                    //load database config
+                    $this->metadata['config']['config_loaded'] = 0;
+                    if (file_exists($this->path_configfile)) 
                     {
-                        $config = json_decode($config, 1);
-                        if (isset($config) && is_array($config) && count($config)) 
+                        if ($config = file_get_contents($this->path_configfile)) 
                         {
-                            //assign config to private variable
-                            $this->config = $config;                            
-                            
-                            $this->metadata['config']['config_loaded'] = 1;
-                            $elements = '';
-                            foreach ($config as $k => $v) {
-                                if (is_array($v)) 
-                                    $elements .= ' | ' . $k . '(array)';
-                                else
-                                    $elements .= ' | ' . $k . '';
+                            $config = json_decode($config, 1);
+                            if (isset($config) && is_array($config) && count($config)) 
+                            {
+                                //assign config to private variable
+                                $this->config = $config;                            
+                                
+                                $this->metadata['config']['config_loaded'] = 1;
+                                $elements = '';
+                                foreach ($config as $k => $v) {
+                                    if (is_array($v)) 
+                                        $elements .= ' | ' . $k . '(array)';
+                                    else
+                                        $elements .= ' | ' . $k . '';
+                                }
+                                $this->metadata['config']['keys'] = trim($elements, ' |');
+                                unset($elements);
                             }
-                            $this->metadata['config']['keys'] = trim($elements, ' |');
-                            unset($elements);
                         }
                     }
                 }
@@ -86,7 +95,12 @@
                 }
                 
                 //load AWS region
-                $this->aws_region = $this->config['aws']['aws_region'];
+                if (!isset($this->config['aws']['aws_region']))
+                {
+                    return $this->paramerror = $this->doError(
+                        sprintf('Required variable [aws][aws_region] not found from config')
+                    );
+                } else $this->aws_region = $this->config['aws']['aws_region'];
                 
                 //retrieve body and encode it depending if its POST or GET
                 if (!empty($data['requestContext']['http']['method'])) 
@@ -119,6 +133,7 @@
                 }
                 
                 //loop and clean parameters
+                if (isset($data) && is_array($data) && count($data))
                 foreach ($data as $paramkey => $paramvalue)
                 {
                     if (
@@ -286,7 +301,7 @@
                 
                 $itens = $this->config;
                 foreach($paths as $ndx) {
-                    $itens = $itens[$ndx];
+                    if (isset($itens[$ndx])) $itens = $itens[$ndx];
                 }
                 return $this->paramDecrypt($itens);
             }
@@ -640,7 +655,7 @@
                 //see if we need to establish or maintain a database connection
                 if (
                     isset($data['parameters']['connection']) && 
-                    !is_object($this->metadata['connections'][$data['parameters']['connection']]['object']) && 
+                    empty($this->metadata['connections'][$data['parameters']['connection']]['object']) && 
                     ($data['command'] != 'doEstablishSQLConnection')
                 )
                 {
