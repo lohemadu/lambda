@@ -161,18 +161,15 @@
 			    $query = implode("\n", $querypool);
 
 			    if (!$res = $conn->multi_query($query)) {
-				    while ($conn->next_result()) // flush multi_queries
-				    {
-				        if (!$conn->more_results()) break;
-				    }
+				    while ($conn->next_result()) { if (!$conn->more_results()) break; }
 			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
 			    }			    
 			    
-			    while ($conn->next_result()) // flush multi_queries
-			    {
-			        if (!$conn->more_results()) break;
-			    }
-                return $helper->doOk(1);
+			    // flush multi_queries
+			    while ($conn->next_result()) { if (!$conn->more_results()) break; }
+			    
+			    //get touched id
+			    return $helper->doOk(mysqli_insert_id($conn));
 			}
 
 
@@ -232,10 +229,12 @@
                 ])) return $helper->doError($err);
                 return $helper->doOk($query);
             */
-			function __mysql_constructUpdateQuery($data, $helper) {
+			function __mysql_constructUpdateQuery($data, $helper)
+			{
                 if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
                 
-                foreach ($data['keys'] as $void => $key) {
+                foreach ($data['keys'] as $void => $key)
+                {
                     if (!isset($data['fields'][$key])) return $helper->doError('fields[' . $key . '] is not defined in input params');
                     $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
                     unset($data['fields'][$key]);
