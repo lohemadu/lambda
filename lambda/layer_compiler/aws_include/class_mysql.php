@@ -269,6 +269,7 @@
                 return $helper->doOk($query);				
 			}
 			
+
             /*
                 get the id row from provided parameters
                 
@@ -337,6 +338,50 @@
                 
                 return $helper->doOk($value);			    
 			}
+
+
+			/*
+			    function is updating softdelete flag.
+			    
+			    sample usage:
+                    if ($err = $helper->doExecute(${$output = 'void'}, [
+                        'command' => 'mysql_doSoftDelete',
+                        'parameters' => [
+                            'connection' => 'core',
+                            'tablename' => 'sample table'',
+                            'keyholder' => 'is_deleted',
+                            'where' => [
+                                'function_name' => $function
+                            ]
+                        ]
+                    ])) return $helper->doError($err);
+			    
+			*/
+			
+			function __mysql_doSoftDelete($data, $helper) {
+			    //check if connection is established
+			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
+			        return $helper->doError('connection to database is not established: %s', $data['connection']);
+			    } else {
+			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
+			    }
+			    
+                foreach ($data['where'] as $key => $value) {
+                    $wherequery[] = sprintf('`%s` = \'%s\'', $key, $value);
+                }
+                $where = implode(' AND ', $wherequery);
+                if (!$where) {
+                    return $helper->doError('where clause is not defined for count query.');
+                }
+                
+                $query = "UPDATE `%s` SET `%s` = 1 WHERE %s";
+                $makequery = sprintf($query, $data['tablename'], $data['keyholder'], $where);
+                if (!$conn->query($makequery)) {
+                    return $helper->doError($conn->error);
+                }
+                
+                return $helper->doOk(mysqli_insert_id($conn));
+			}			
 			
 			
 		}
