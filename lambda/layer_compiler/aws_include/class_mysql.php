@@ -161,9 +161,11 @@
 			    $query = implode("\n", $querypool);
 
 			    if (!$res = $conn->multi_query($query)) {
+			        while ($conn->next_result()) {;}
 			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
 			    }			    
 			    
+			    while ($conn->next_result()) {;}
                 return $helper->doOk(1);
 			}
 
