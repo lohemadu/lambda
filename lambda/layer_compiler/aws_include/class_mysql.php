@@ -303,7 +303,13 @@
                 if (!isset($data['column']) or $data['column'] == '') {
                     return $helper->doError('"column" input parameter is not defined for $mysql->__mysql_getSingleCellValue()');
                 }
-                foreach ($data['where'] as $key => $value) {
+                foreach ($data['where'] as $key => $value) 
+                {
+                    if (is_null($value) or empty(trim($value))) {
+                        return $helper->doError(
+                            sprintf('when performing getSingleCellValue() $data["where"]["%s"] key had no value. use parameter empty-value-ok to bypass this message', $key)
+                        );
+                    }
                     $wherequery[] = sprintf('`%s` = \'%s\'', $key, $value);
                 }
                 $where = implode(' AND ', $wherequery);
@@ -318,7 +324,7 @@
                 }
                 
                 if (empty(mysqli_num_rows($res))) {
-                    return $helper->doError('no records retrieved from $mysql->__mysql_getSingleCellValue()');
+                    return $helper->doError('no records retrieved from $mysql->__mysql_getSingleCellValue():');
                 }
                 
                 if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
