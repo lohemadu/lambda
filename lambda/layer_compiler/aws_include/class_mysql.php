@@ -23,9 +23,9 @@
 			function __mysql_doQuery($data, $helper) 
 			{
 			    /* we remove those later */
-			    if (!$data[$tf = 'connection']) return $this->doError('required parameter missing: [' . $tf . ']');
-			    if (!$data[$tf = 'keyholder']) return $this->doError('required parameter missing: [' . $tf . ']');
-			    if (!$data[$tf = 'query']) return $this->doError('required parameter missing: [' . $tf . ']');
+			    if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
+			    if (!$data[$tf = 'keyholder']) return $helper->doError('required parameter missing: [' . $tf . ']');
+			    if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
 			    /* end of removing those */
 			    
 			    //check if connection is established
@@ -233,10 +233,10 @@
                 return $helper->doOk($query);
             */
 			function __mysql_constructUpdateQuery($data, $helper) {
-                if (!$data[$tf = 'tablename']) return $this->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
                 
                 foreach ($data['keys'] as $void => $key) {
-                    if (!isset($data['fields'][$key])) return $this->doError('fields[' . $key . '] is not defined in input params');
+                    if (!isset($data['fields'][$key])) return $helper->doError('fields[' . $key . '] is not defined in input params');
                     $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
                     unset($data['fields'][$key]);
                 }
