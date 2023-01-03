@@ -154,7 +154,7 @@
 			    if ($ini == 0) return '';
 			    $ini += strlen($start);
 			    $len = strpos($string, $end = ' WHERE ', $ini) - $ini;
-			    $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($string, $ini, $len));
+			    $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($string, $ini, $len)) . ';';
 			    
 			    $query = implode("\n", $querypool);
 
