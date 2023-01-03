@@ -348,7 +348,7 @@
                         'command' => 'mysql_doSoftDelete',
                         'parameters' => [
                             'connection' => 'core',
-                            'tablename' => 'sample table'',
+                            'tablename' => 'sample_table_name',
                             'keyholder' => 'is_deleted',
                             'where' => [
                                 'function_name' => $function
@@ -381,7 +381,9 @@
                 }
                 
                 return $helper->doOk(mysqli_insert_id($conn));
-			}			
+			}		
+
+
 			
 			
 		}
