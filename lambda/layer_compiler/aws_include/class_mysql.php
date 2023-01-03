@@ -161,11 +161,17 @@
 			    $query = implode("\n", $querypool);
 
 			    if (!$res = $conn->multi_query($query)) {
-			        while ($conn->next_result()) {;}
+				    while ($mysqli->next_result()) // flush multi_queries
+				    {
+				        if (!$mysqli->more_results()) break;
+				    }
 			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
 			    }			    
 			    
-			    while ($conn->next_result()) {;}
+			    while ($mysqli->next_result()) // flush multi_queries
+			    {
+			        if (!$mysqli->more_results()) break;
+			    }
                 return $helper->doOk(1);
 			}
 
