@@ -144,19 +144,24 @@
 			    
 			    //insert query
 			    
-			    $insert = sprintf(print_r(json_decode(json_decode($this->__mysql_constructInsertQuery($data, $helper), 1)['body'], 1)['data']['result'], 1));
-			    $update = sprintf(print_r(json_decode(json_decode($this->__mysql_constructUpdateQuery($data, $helper), 1)['body'], 1)['data']['result'], 1));
+			    //insert
+			    $insert = json_decode($e = $this->__mysql_constructInsertQuery($data, $helper), 1);
+			    if ($insert['statusCode'] != 200) return $e;
+			    $insert = sprintf(print_r(json_decode($insert['body'], 1)['data']['result'], 1));			    
 			    
-			    $querypool[] = $insert;
+			    //update
+			    $update = json_decode($e = $this->__mysql_constructUpdateQuery($data, $helper), 1);
+			    if ($update['statusCode'] != 200) return $e;
+			    $update = sprintf(print_r(json_decode($update['body'], 1)['data']['result'], 1));
 
-			    $string = ' ' . $update;
-			    $ini = strpos($string, $start = ' SET ');
-			    if ($ini == 0) return '';
+                //modify update query for the multiquery			    
+			    if (empty($ini = strpos($update, $start = ' SET '))) return $helper->doError('trim error');
 			    $ini += strlen($start);
-			    $len = strpos($string, $end = ' WHERE ', $ini) - $ini;
+			    $len = strpos($update, $end = ' WHERE ', $ini) - $ini;
 
 			    //build on duplicate query
-			    $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($string, $ini, $len)) . ';';
+			    $querypool[] = $insert;
+			    $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($update, $ini, $len)) . ';';
 			    
 			    $query = implode("\n", $querypool);
 
