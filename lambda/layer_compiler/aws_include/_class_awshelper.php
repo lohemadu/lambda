@@ -946,8 +946,6 @@
                     else return $this->doError($err); 
                 }
                 
-                
-                
                 if (!$function_url || $err) {
                     return $this->doError(sprintf('Error 404: API endpoint %s not found', $data['endpoint']));
                 }

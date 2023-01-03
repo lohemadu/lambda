@@ -1,5 +1,6 @@
 <?php
 
+	/* class responsible for all the mysql interactions */
 	if (!class_exists('mysql'))
 	{
 		class mysql {
