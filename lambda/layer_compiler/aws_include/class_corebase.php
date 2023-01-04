@@ -170,7 +170,9 @@
 					if ($this->hasContent($data['rawQueryString'])) 
 					{
 						parse_str($data['rawQueryString'], $data);
-					}
+					} else {
+                        $data = [];
+                    }
 				} else {
                     //method is not POST | GET
                     return $this->paramerror = $this->doError(
