@@ -17,6 +17,7 @@
 	    public $error_bad_request = 400;
 		public $success_status = 200;
 		public $task = [];
+        public $aws_region;
 
 		function __construct() 
 		{
