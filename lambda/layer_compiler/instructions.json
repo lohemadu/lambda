@@ -7,7 +7,7 @@
       },
       {
         "path": "/lambda/layer_compiler/aws_include/class_corebase.php",
-        "destination": "includes/_class_corebase.php"
+        "destination": "includes/class_corebase.php"
       }
     ],
     "aws-php-include-mysql": [
