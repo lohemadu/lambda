@@ -342,7 +342,7 @@
                     'database' => $this->paramDecrypt($this->config['connections'][$data['connection']]['database'])
                 ];
                 
-                mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT);
+                mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_INDEX);
                 
                 if (!$conn = mysqli_connect(
                     $cs['hostname'], 
