@@ -4,7 +4,7 @@
 	if (!class_exists('mysql'))
 	{
 		class mysql {
-			
+		    
 			/*
 			    for making simple query
 			    sample usage:
@@ -114,23 +114,24 @@
 
                 sample usage:
                 //enter or update row in _aws_layers_table
-                if ($err = $test->doExecute(${$output = 'query'}, [
+                if ($err = $helper->doExecute(${$output = 'query'}, [
                     'command' => 'mysql_doInsertOrUpdate',
                     'parameters' => [
                         'tablename' => '_aws_layers',
-                        'fields' => [
-                            'aws_layer_name' => 'my-layer',
-                            'version' => 12
-                        ],
+                        'fields' => $modify_datapack,
+                        'auto-increment-field' => $field_you_keep_primary,
                         'keys' => [
                             'aws_layer_name'
                         ],
-                        'connection' => $conn
+                        'connection' => 'core',
                     ]
                 ])) return $helper->doError($err);              
             */			
 			function __mysql_doInsertOrUpdate($data, $helper)
 			{
+			    //get rid of later
+			    if (empty($data['auto-increment-field'])) return $helper->doError('$data[auto-increment-field] is required but not defined in parameters');
+			    
 			    //check if connection is established
 			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
 			        return $helper->doError('connection to database is not established: %s', $data['connection']);
@@ -388,9 +389,6 @@
                 
                 return $helper->doOk(mysqli_insert_id($conn));
 			}		
-
-
-			
 			
 		}
 	}

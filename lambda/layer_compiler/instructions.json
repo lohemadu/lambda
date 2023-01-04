@@ -4,6 +4,10 @@
       {
         "path": "/lambda/layer_compiler/aws_include/_class_awshelper.php",
         "destination": "includes/_class_awshelper.php"
+      },
+      {
+        "path": "/lambda/layer_compiler/aws_include/class_corebase.php",
+        "destination": "includes/_class_corebase.php"
       }
     ],
     "aws-php-include-mysql": [
