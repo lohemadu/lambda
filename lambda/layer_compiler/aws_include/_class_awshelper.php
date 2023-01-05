@@ -95,6 +95,11 @@
                             {
                                 try {
                                     require_once($includefile);
+                                    //class not found
+                                    if (!class_exists($module)) {
+                                        return sprintf('class %s was requested but not found', $module);
+                                    }
+                                    //create class and assign
                                     $this->metadata['modules'][$module] = new $module;
                                 }
                                 catch(exception $e) {

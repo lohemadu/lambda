@@ -1,14 +1,14 @@
 <?php
 
-	/* class responsible for all the mysql interactions */
-	if (!class_exists('mysql'))
-	{
-		class mysql {
-		    
-			/*
-			    for making simple query
-			    sample usage:
-			    
+    /* class responsible for all the mysql interactions */
+    if (!class_exists('mysql'))
+    {
+        class mysql extends corebase {
+            
+            /*
+                for making simple query
+                sample usage:
+                
                 $output = 'res';
                 if ($err = $helper->doExecute(${$output}, [
                     'command' => 'mysql_doQuery',
@@ -19,27 +19,27 @@
                     ]
                 ])) return $helper->doError($err);
                 
-                return $helper->doError($res);			    
-			*/                
-			function __mysql_doQuery($data, $helper) 
-			{
-			    /* we remove those later */
-			    if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
-			    if (!$data[$tf = 'keyholder']) return $helper->doError('required parameter missing: [' . $tf . ']');
-			    if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
-			    /* end of removing those */
-			    
-			    //check if connection is established
-			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
-			        return $helper->doError('connection to database is not established: %s', $data['connection']);
-			    } else {
-			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
-			    }
-			    
-			    if (!$res = $conn->query($data['query'])) {
-			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
-			    }
-			    
+                return $helper->doError($res);              
+            */                
+            function __mysql_doQuery($data, $helper) 
+            {
+                /* we remove those later */
+                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'keyholder']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                /* end of removing those */
+                
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
+                if (!$res = $conn->query($data['query'])) {
+                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                }
+                
                 //no records return
                 if (!mysqli_num_rows($res)) {
                     if (isset($data['no-rows-error']) && $data['no-rows-error'] == true) {
@@ -64,11 +64,53 @@
                 }
                 
                 return $helper->doOk($result);
-			}
-			
-			/* function is expecting single row with field "cnt" 
-			    sample usage:
-			    
+            }
+            
+            
+
+            /*
+                for making query where we dont expect any result
+                sample usage:
+                
+                $output = 'void';
+                if ($err = $helper->doExecute(${$output}, [
+                    'command' => 'mysql_doVoidQuery',
+                    'parameters' => [
+                        'connection' => 'core',
+                        'query' => "select * from `_aws_eu-north-1_functions`"
+                    ]
+                ])) return $helper->doError($err);
+                
+                return $helper->doError($res);              
+            */
+            function __mysql_doVoidQuery($data, $helper) 
+            {
+                //if(!isset(debug_backtrace()[1]['class']) || !in_array(debug_backtrace()[1]['class'], ['awshelpers']))
+                  //  return $helper->doError('access class prohibited');
+                
+                /* we remove those later */
+                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                /* end of removing those */
+                
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
+                if (!$res = $conn->query($data['query'])) {
+                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                }
+                
+                return $helper->doOk('query completed without errors');
+            }
+            
+            
+            /* function is expecting single row with field "cnt" 
+                sample usage:
+                
                 $output = 'res';
                 if ($err = $helper->doExecute(${$output}, [
                     'command' => 'mysql_doQuery',
@@ -78,37 +120,37 @@
                     ]
                 ])) return $helper->doError($err);
                 
-                return $helper->doError($res);			
-			*/
-			function __mysql_getCount($data, $helper)
-			{
-			    //check if connection is established
-			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
-			        return $helper->doError('connection to database is not established: %s', $data['connection']);
-			    } else {
-			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
-			    }
-			    
-			    //continue with usual execution
-			    $data['keyholder'] = 'cnt';
-			    
-			    if (!$res = $conn->query($data['query'])) {
-			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
-			    }
-			    
-			    if (!mysqli_num_rows($res)) {
-			        return $helper->doOk('0');
-			    }
-			    
-			    $row = mysqli_fetch_assoc($res);
-			    if (!isset($row[$data['keyholder']])) {
-			        return $helper->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
-			    }
-			    
-			    return $helper->doOk($row['cnt']);
-			    
-			}
-			
+                return $helper->doError($res);          
+            */
+            function __mysql_getCount($data, $helper)
+            {
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
+                //continue with usual execution
+                $data['keyholder'] = 'cnt';
+                
+                if (!$res = $conn->query($data['query'])) {
+                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                }
+                
+                if (!mysqli_num_rows($res)) {
+                    return $helper->doOk('0');
+                }
+                
+                $row = mysqli_fetch_assoc($res);
+                if (!isset($row[$data['keyholder']])) {
+                    return $helper->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
+                }
+                
+                return $helper->doOk($row['cnt']);
+                
+            }
+            
             /*
                 function will either insret or update recordset
 
@@ -126,61 +168,61 @@
                         'connection' => 'core',
                     ]
                 ])) return $helper->doError($err);              
-            */			
-			function __mysql_doInsertOrUpdate($data, $helper)
-			{
-			    //get rid of later
-			    if (empty($data['auto-increment-field'])) return $helper->doError('$data[auto-increment-field] is required but not defined in parameters');
-			    
-			    //check if connection is established
-			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
-			        return $helper->doError('connection to database is not established: %s', $data['connection']);
-			    } else {
-			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
-			    }
-			    
-			    //continue with usual execution
-			    $querypool[] = sprintf('SET @NEW_AI = (SELECT MAX(`%s`) + 1 FROM `%s`);', $data['auto-increment-field'], $data['tablename']);
-			    $querypool[] = sprintf("SET @ALTER_SQL = CONCAT('ALTER TABLE `%s` AUTO_INCREMENT =', @NEW_AI);", $data['tablename']);
-			    $querypool[] = sprintf("PREPARE NEWSQL FROM @ALTER_SQL; EXECUTE NEWSQL;");
-			    
-			    //insert query
-			    
-			    //insert
-			    $insert = json_decode($e = $this->__mysql_constructInsertQuery($data, $helper), 1);
-			    if ($insert['statusCode'] != 200) return $e;
-			    $insert = sprintf(print_r(json_decode($insert['body'], 1)['data']['result'], 1));			    
-			    
-			    //update
-			    $update = json_decode($e = $this->__mysql_constructUpdateQuery($data, $helper), 1);
-			    if ($update['statusCode'] != 200) return $e;
-			    $update = sprintf(print_r(json_decode($update['body'], 1)['data']['result'], 1));
+            */          
+            function __mysql_doInsertOrUpdate($data, $helper)
+            {
+                //get rid of later
+                if (empty($data['auto-increment-field'])) return $helper->doError('$data[auto-increment-field] is required but not defined in parameters');
+                
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
+                //continue with usual execution
+                $querypool[] = sprintf('SET @NEW_AI = (SELECT MAX(`%s`) + 1 FROM `%s`);', $data['auto-increment-field'], $data['tablename']);
+                $querypool[] = sprintf("SET @ALTER_SQL = CONCAT('ALTER TABLE `%s` AUTO_INCREMENT =', @NEW_AI);", $data['tablename']);
+                $querypool[] = sprintf("PREPARE NEWSQL FROM @ALTER_SQL; EXECUTE NEWSQL;");
+                
+                //insert query
+                
+                //insert
+                $insert = json_decode($e = $this->__mysql_constructInsertQuery($data, $helper), 1);
+                if ($insert['statusCode'] != 200) return $e;
+                $insert = sprintf(print_r(json_decode($insert['body'], 1)['data']['result'], 1));               
+                
+                //update
+                $update = json_decode($e = $this->__mysql_constructUpdateQuery($data, $helper), 1);
+                if ($update['statusCode'] != 200) return $e;
+                $update = sprintf(print_r(json_decode($update['body'], 1)['data']['result'], 1));
 
-                //modify update query for the multiquery			    
-			    if (empty($ini = strpos($update, $start = ' SET '))) return $helper->doError('trim error');
-			    $ini += strlen($start);
-			    $len = strpos($update, $end = ' WHERE ', $ini) - $ini;
+                //modify update query for the multiquery                
+                if (empty($ini = strpos($update, $start = ' SET '))) return $helper->doError('trim error');
+                $ini += strlen($start);
+                $len = strpos($update, $end = ' WHERE ', $ini) - $ini;
 
-			    //build on duplicate query
-			    $querypool[] = $insert;
-			    $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($update, $ini, $len)) . ';';
-			    
-			    $query = implode("\n", $querypool);
+                //build on duplicate query
+                $querypool[] = $insert;
+                $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($update, $ini, $len)) . ';';
+                
+                $query = implode("\n", $querypool);
 
-			    if (!$res = $conn->multi_query($query)) {
-				    while ($conn->next_result()) { if (!$conn->more_results()) break; }
-			        return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
-			    }			    
-			    
-			    // flush multi_queries
-			    while ($conn->next_result()) { if (!$conn->more_results()) break; }
-			    
-			    //get touched id
-			    return $helper->doOk(mysqli_insert_id($conn));
-			}
+                if (!$res = $conn->multi_query($query)) {
+                    while ($conn->next_result()) { if (!$conn->more_results()) break; }
+                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                }               
+                
+                // flush multi_queries
+                while ($conn->next_result()) { if (!$conn->more_results()) break; }
+                
+                //get touched id
+                return $helper->doOk(mysqli_insert_id($conn));
+            }
 
 
-			/*
+            /*
                 inserting a new record to table
                 sample usage:
 
@@ -196,8 +238,8 @@
                     ]
                 ])) return $helper->doError($err);
                 return $helper->doOk($query);
-            */			
-			function __mysql_constructInsertQuery($data, $helper) {
+            */          
+            function __mysql_constructInsertQuery($data, $helper) {
                 $packed = array();
                 foreach($data['fields'] as $k => $v) {
                     if (!is_array($v)) $packed[$k] = addslashes($v);
@@ -210,9 +252,9 @@
                 //for mysql functions we use !!!NOW()!!!
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
                 
-                return $helper->doOk($query);			    
-			}
-			
+                return $helper->doOk($query);               
+            }
+            
 
             /*
                 function will update recordset based on given keys
@@ -236,8 +278,8 @@
                 ])) return $helper->doError($err);
                 return $helper->doOk($query);
             */
-			function __mysql_constructUpdateQuery($data, $helper)
-			{
+            function __mysql_constructUpdateQuery($data, $helper)
+            {
                 if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
                 
                 foreach ($data['keys'] as $void => $key)
@@ -267,9 +309,9 @@
                 //remove escaping
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
 
-                return $helper->doOk($query);				
-			}
-			
+                return $helper->doOk($query);               
+            }
+            
 
             /*
                 get the id row from provided parameters
@@ -287,15 +329,15 @@
                         'connection' => 'core'
                     ]
                 ])) return $helper->doError($err);                
-            */			
-			function __mysql_getSingleCellValue($data, $helper) {
-			    //check if connection is established
-			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
-			        return $helper->doError('connection to database is not established: %s', $data['connection']);
-			    } else {
-			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
-			    }
-			    
+            */          
+            function __mysql_getSingleCellValue($data, $helper) {
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
                 //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
                 if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
                 if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
@@ -343,14 +385,14 @@
                     return $helper->doError('NULL');
                 }
                 
-                return $helper->doOk($value);			    
-			}
+                return $helper->doOk($value);               
+            }
 
 
-			/*
-			    function is updating softdelete flag.
-			    
-			    sample usage:
+            /*
+                function is updating softdelete flag.
+                
+                sample usage:
                     if ($err = $helper->doExecute(${$output = 'void'}, [
                         'command' => 'mysql_doSoftDelete',
                         'parameters' => [
@@ -362,17 +404,17 @@
                             ]
                         ]
                     ])) return $helper->doError($err);
-			    
-			*/
-			
-			function __mysql_doSoftDelete($data, $helper) {
-			    //check if connection is established
-			    if (!$helper->metadata['connections'][$data['connection']]['established']) {
-			        return $helper->doError('connection to database is not established: %s', $data['connection']);
-			    } else {
-			        $conn = $helper->metadata['connections'][$data['connection']]['object'];
-			    }
-			    
+                
+            */
+            
+            function __mysql_doSoftDelete($data, $helper) {
+                //check if connection is established
+                if (!$helper->metadata['connections'][$data['connection']]['established']) {
+                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                } else {
+                    $conn = $helper->metadata['connections'][$data['connection']]['object'];
+                }
+                
                 foreach ($data['where'] as $key => $value) {
                     $wherequery[] = sprintf('`%s` = \'%s\'', $key, $value);
                 }
@@ -388,9 +430,9 @@
                 }
                 
                 return $helper->doOk(mysqli_insert_id($conn));
-			}		
-			
-		}
-	}
+            }       
+            
+        }
+    }
 
 ?>
