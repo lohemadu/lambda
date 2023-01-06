@@ -1,61 +1,187 @@
 <?php
 
-	class corebase 
-	{
-		//declare protected inheritable variables
-		private $version;
-		
-		//protected variables
-		protected $configfile = '/opt/config/configuration.json';
-		protected $metadata = [];
-		
-		//make protected later!
-		protected $config = [];
-		protected $salt = "TjZpB8609WkpKG5ftdvQ";
-		
-		//public variables
-	    public $error_bad_request = 400;
-		public $success_status = 200;
-		public $task = [];
-        public $aws_region;
+    class corebase 
+    {
+        //declare protected inheritable variables
+        private $returned = 0;
+        private $configfile = '/opt/config/configuration.json';
 
-		function __construct() 
-		{
-			$this->version = '1.1.0.core';
-		}
-		
-		//PUBLIC SCOPE METHOD DECLARATIONS
-		
-		/* by entering input parameters we return if element is array and can be forlooped */
-		public function hasElements($variable = NULL) {
-			return (isset($variable) && is_array($variable) && count($variable));
-		}
-		
-		public function hasContent($variable = NULL) {
-			return (isset($variable) && !empty($variable));
-		}
-		
-		//INHERITABLE SCOPE METHOD DECLARATIONS
-		
-		/* function is preparing metadata for displaying and registering its base structure */
-		protected function constructMetadata($paramsyntax = []) 
-		{
-			//get starttime
-			try {
-				$started_at_microtime = intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3));
-			} catch(Exception $e) { 
-				$started_at_microtime = NULL;
-			}
-			
-			//construct base metadata structure
+        protected $config = [];
+        
+        //public variables
+        public $error_bad_request = 400;
+        public $success_status = 200;
+        public $task = [];
+        public $aws_region;
+        public $metadata = [];
+        public $version = '1.1.0';
+        
+        
+        //will be launched when we start a new server infinite loop
+        function initialization($function) 
+        {
+            
+            //constructing basic class metadata
+            $this->constructMetadata($function);            
+
+            //read in global configuration
+            $this->readConfig();            
+            
+            //anything we return here will be displayed as an error
+            //return "unable to load config"
+        }
+        
+        
+        //will be started prior every run
+        public function prepare(&$data, $customparams = NULL) 
+        {
+            // read request headers and see what we get from there
+            if ($err = $this->readHeaders($data))
+                return $err;
+                
+            //read request body
+            if ($err = $this->readBody($data)) {
+                return $err;
+            }
+            
+            //clean and validate parameters
+            return $this->performParameterCheck($data, $customparams ?: NULL);
+            
+            //anything we return here will be displayed as an error
+            //return "error occured"
+        }        
+        
+        
+        function resultreturned() {
+            return $this->returned;
+        }
+        
+
+        //PUBLIC SCOPE METHOD DECLARATIONS
+        function err($data = NULL)
+        {
+            if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
+            $this->timerstop();
+            $this->returnStatus = 400;
+
+            //error - 400
+            if (is_string($data)) $data = trim($data);
+            if (empty($data)) {
+                //return as a boolean
+                $data = ['code' => $this->returnStatus, 'error' => 1];
+            } else
+            if (is_object($data)) {
+                $data = ['code' => $this->returnStatus, 'message' => $data, 'methods' => get_class_methods($data)];
+            } else                
+            if (!is_array($data)) 
+            {
+                //result as a string message
+                $data = ['code' => $this->returnStatus, 'message' => $data];
+            } else
+            {
+                //result as an array
+                $data = ['code' => $this->returnStatus, 'message' => $data];
+            }
+            
+            $json = json_encode(
+            [
+                'status' => "error",
+                'data' => $data,
+                'timestamp' => time(),
+                '@metadata' => $this->getMetadata()
+            ], JSON_FORCE_OBJECT);
+                    
+            $result = json_encode([
+                'statusCode' => $this->returnStatus,
+                'body' => $json,
+            ]);
+            
+            return $result; 
+        }
+
+        public function ok($data = NULL)
+        {
+            if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
+            $this->timerstop();
+            $this->returnStatus = 200;
+            //success - 200
+            if (is_string($data)) $data = trim($data);
+            if (empty($data)) {
+                //return as a boolean
+                $data = ['code' => $this->returnStatus, 'success' => sprintf('%b', $data)];
+            } else
+            if (is_object($data)) {
+                $data = ['code' => $this->returnStatus, 'result' => $data];
+            } else                
+            if (!is_array($data)) 
+            {
+                //result as a string message
+                $data = ['code' => $this->returnStatus, 'result' => $data];
+            } else
+            {
+                //result as an array
+                $return = $data;
+                if ($this->hasElements(@$pagination))
+                {
+                    foreach ($pagination as $k => $v) {
+                        if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
+                            $return[$k] = $v;
+                    }
+                }
+                
+                $data = ['code' => $this->returnStatus, 'records' => $return];
+            }
+            
+            $json = json_encode(
+            [
+                'status' => "success",
+                'data' => $data,
+                'timestamp' => time(),
+                '@metadata' => $this->getMetadata(),
+            ], JSON_FORCE_OBJECT);
+                    
+            $result = json_encode([
+                'statusCode' => $this->returnStatus,
+                'body' => $json,
+            ]);
+            
+            return $result;
+        }   
+        
+        
+
+        private function timerstop()
+        {
+            if (empty($this->metadata['timer']['started_at_microtime'])) return;
+            else 
+                if ($this->metadata['timer']['started_at_microtime'] == 'N/A') return;
+
+            $this->metadata['timer']['ended_at_microtime'] = intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3));
+            //calculate execution time
+            $this->metadata['timer']['execution_time'] = $this->metadata['timer']['ended_at_microtime'] - $this->metadata['timer']['started_at_microtime'];                        
+        }
+
+        /* by entering input parameters we return if element is array and can be forlooped */
+        public function hasElements($variable = NULL) {
+            return (isset($variable) && is_array($variable) && count($variable));
+        }
+        
+        public function hasContent($variable = NULL) {
+            return (isset($variable) && !empty($variable));
+        }
+        
+        //INHERITABLE SCOPE METHOD DECLARATIONS
+
+        /* function is preparing metadata for displaying and registering its base structure */
+        private function constructMetadata($function) 
+        {
+            //construct base metadata structure
             $this->metadata = [
                 'caller' => [
-                    'function' => debug_backtrace()[2]['function'] ?? 'direct'
+                    'class' => $function
                 ],
-                'timer' => [
-                    'started_at_microtime' => $started_at_microtime ?: '0'
-                ],
-                'paramsyntax' => $paramsyntax,
+                'timer' => [],
+                'paramsyntax' => [],
                 'params' => [
                     'accepted' => [],
                     'unexpected' => [],
@@ -64,135 +190,136 @@
                 'config' => [],
                 'connections' => [],
                 'modules' => []
-            ]; 			
-		}
-		
-		/* reading config from global config file */
-		protected function readConfig($config = []) 
-		{
-			if ($this->hasElements($config)) 
-			{
-                $this->config = $config;
-                $this->metadata['config']['config_loaded'] = 1;				
-			}
-			else 
-			{
-				$this->metadata['config']['config_loaded'] = 0;
-				if (file_exists($this->configfile)) 
-				{
-                    if ($config = file_get_contents($this->configfile)) 
+            ];          
+        }
+        
+        
+        private function getMetadata() {
+            $this->metadata['returned'] = $this->returned;
+            return $this->metadata;
+        }
+        
+        /* reading config from global config file */
+        private function readConfig() 
+        {
+            $this->metadata['config']['config_loaded'] = 0;
+            if (file_exists($this->configfile)) 
+            {
+                if ($config = file_get_contents($this->configfile)) 
+                {
+                    $config = json_decode($config, 1);
+                    if ($this->hasElements($config)) 
                     {
-                        $config = json_decode($config, 1);
-                        if ($this->hasElements($config)) 
-                        {
-                            //assign config to private variable
-                            $this->config = $config;                            
-                            
-                            $this->metadata['config']['config_loaded'] = 1;
-                            $elements = '';
-                            foreach ($config as $k => $v) {
-                                if (is_array($v)) 
-                                    $elements .= ' | ' . $k . '(array)';
-                                else
-                                    $elements .= ' | ' . $k . '';
-                            }
-                            $this->metadata['config']['keys'] = trim($elements, ' |');
-                            unset($elements);
+                        //assign config to private variable
+                        $this->config = $config;                            
+                        
+                        $this->metadata['config']['config_loaded'] = 1;
+                        $elements = '';
+                        foreach ($config as $k => $v) {
+                            if (is_array($v)) 
+                                $elements .= ' | ' . $k . '(array)';
+                            else
+                                $elements .= ' | ' . $k . '';
                         }
-                        else
-                        {
-                        	$this->config = [];
-                        }
+                        $this->metadata['config']['keys'] = trim($elements, ' |');
+                        unset($elements);
+                    }
+                    else
+                    {
+                        $this->config = [];
                     }
                 }
-			}
-		}
-		
-		/* reading headers from AWS Lambda Request*/
-		protected function readHeaders($data) 
-		{
+            }
+            
+            if (empty($this->config['environment'])) return 'working environment not provided in config';
+            $this->metadata['caller']['environment'] = $this->config['environment'];
+        }
+        
+        /* reading headers from AWS Lambda Request*/
+        private function readHeaders($data) 
+        {
             if ($this->hasContent(@$data['headers']['host'])) 
             {
                 //environment variables
                 $hostparts = explode('.', $data['headers']['host']);
                 
                 if ($this->hasContent($hostparts[0])) {
-                	$this->task['domain_prefix'] = $hostparts[0];
+                    $this->task['domain_prefix'] = $hostparts[0];
                 }
                 if ($this->hasContent($hostparts[2])) {
-                	$this->task['region'] = $hostparts[2];
+                    $this->task['region'] = $hostparts[2];
                 }                
                 if ($this->hasContent($data['headers']['host'])) {
-                	$this->task['function_url'] = $data['headers']['host'];
+                    $this->task['function_url'] = $data['headers']['host'];
                 }
                 if ($this->hasContent($data['requestContext']['requestId'])) {
-                	$this->task['requestid'] = $data['requestContext']['requestId'];
+                    $this->task['requestid'] = $data['requestContext']['requestId'];
                 }
             }
             
             //load AWS region
             if ($this->hasContent($this->config['aws']['aws_region'])) {
-            	$this->aws_region = $this->config['aws']['aws_region'];
+                $this->aws_region = $this->config['aws']['aws_region'];
             } else {
-            	//region failover
-            	if ($this->hasContent($this->task['region'])) {
-            		$this->aws_region = $this->task['region'];
-            	} else return $this->paramerror = $this->doError(
-                    sprintf('WE REQUESTED VARIABLE FROM CONFIG: $this->config["aws"]["aws_region"] but it was not found. Unrecoverable Error.')
-                );
+                //region failover
+                if ($this->hasContent($this->task['region'])) {
+                    $this->aws_region = $this->task['region'];
+                } else return ('aws_region not provided in config $this->config["aws"]["aws_region"]');
             }
-		}
-		
-		protected function readBody(&$data) 
-		{
-			//retrieve body and encode it depending if its POST or GET
-			if ($this->hasContent(@$data['requestContext']['http']['method'])) 
-			{
-				//accept only [POST | GET ] for now
-				$this->method = $data['requestContext']['http']['method'];
-				
-				//POST Method
-				if ($this->method == 'POST')
-				{
-					if ($this->hasContent($data['body']))
-					{
-						//check if content is Base64 Encoded
-						if ((bool)preg_match('/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $data['body'])) {
-							$data['body'] = base64_decode($data['body']);
-						}
+        }
+        
+        private function readBody(&$data) 
+        {
+            //retrieve body and encode it depending if its POST or GET
+            if ($this->hasContent(@$data['requestContext']['http']['method'])) 
+            {
+                //accept only [POST | GET ] for now
+                $this->method = $data['requestContext']['http']['method'];
+                
+                //POST Method
+                if ($this->method == 'POST')
+                {
+                    if ($this->hasContent($data['body']))
+                    {
+                        //check if content is Base64 Encoded
+                        if ((bool)preg_match('/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $data['body'])) {
+                            $data['body'] = base64_decode($data['body']);
+                        }
                                 
-						$data = json_decode($data['body'], 1);
+                        $data = json_decode($data['body'], 1);
                     }                            
                 }
                 //GET Method
                 else if ($this->method == 'GET')
-				{
-					if ($this->hasContent($data['rawQueryString'])) 
-					{
-						parse_str($data['rawQueryString'], $data);
-					} else {
+                {
+                    if ($this->hasContent($data['rawQueryString'])) 
+                    {
+                        parse_str($data['rawQueryString'], $data);
+                    } else {
                         $data = [];
                     }
-				} else {
+                } else {
                     //method is not POST | GET
-                    return $this->paramerror = $this->doError(
-                        sprintf('Method %s is not Allowed.', $this->method)
-                    );
-				}                    
-			}			
-		}
-			
-			
-		protected function performParameterCheck($data)
-		{
-			if ($this->hasElements($this->metadata['paramsyntax']))
-				$paramsyntax = $this->metadata['paramsyntax'];
-			else
-				$paramsyntax = [];
-				
-			if ($this->hasElements($data))
-			{
-				foreach ($data as $paramkey => $paramvalue) {
+                    return sprintf('Method %s is not Allowed.', $this->method);
+                }                    
+            }           
+        }
+            
+            
+        private function performParameterCheck(&$data, $customparams = NULL)
+        {
+            if ($this->hasElements($customparams)) {
+                $this->metadata['paramsyntax'] = $customparams;
+            }
+            
+            if ($this->hasElements($this->metadata['paramsyntax']))
+                $paramsyntax = $this->metadata['paramsyntax'];
+            else
+                $paramsyntax = [];
+            
+            if ($this->hasElements($data))
+            {
+                foreach ($data as $paramkey => $paramvalue) {
                     if (
                         //allowed parameters consist only a-z and 0-1 and -
                         preg_match('/^[a-z0-9\-]+$/', $paramkey) 
@@ -204,7 +331,7 @@
                         !empty(strlen($paramkey))
                     )
                     {
-						//if parameter is accepted or unexpected
+                        //if parameter is accepted or unexpected
                         if (isset($paramsyntax[$paramkey])) 
                         {
                             //param formatting and checks that dont halt the execution
@@ -213,11 +340,10 @@
                             $ps = $paramsyntax[$paramkey];
                             
                             //param formatting and checks that dont halt the execution
-                            if (!in_array($ps['type'], ['integer', 'boolean', 'string', 'array', 'enum']))
+                            $allowed = ['integer', 'boolean', 'string', 'array', 'enum'];
+                            if (!in_array($ps['type'], $allowed))
                             {
-                                return $this->paramerror = $this->doError(
-                                    sprintf('Required parameter syntax "type" not found for parameter "%s" or is not one of the following [ integer | boolean | string | array | enum ]', $paramkey)
-                                );
+                                return sprintf('Required parameter syntax "type" not found for parameter "%s" or is not [ ' . implode(' | ', $allowed) . ' ]', $paramkey);
                             }
                             
                             if ($ps['type'] == 'integer') 
@@ -241,28 +367,28 @@
                                 $this->doEnumParameterTypeTest($data[$paramkey], $paramkey, $ps);
                             }
                             
-                            if (!empty($this->paramerror)) return;
+                            if (!empty($this->paramerror)) return $this->paramerror;
                             
                         } else {
                             //move parameter to unexpected parameters list
                             $this->metadata['params']['unexpected'][$paramkey] = 1;
                             unset($data[$paramkey]);    
-                        }                    	
+                        }                       
                     }
                     else
                     {
-                    	/*
-                        	move parameter to ignored counter
-                        	happens if:
-                        	- parameter uses characters that are not allowed in parameter
-                        	- parameter key starts with - for example 
+                        /*
+                            move parameter to ignored counter
+                            happens if:
+                            - parameter uses characters that are not allowed in parameter
+                            - parameter key starts with - for example 
                         */
                         $this->metadata['params']['ignored']++;
                         unset($data[$paramkey]);
                     }
-				}
-			}
-			
+                }
+            }
+            
             //find parameters that doesnt exist in $data
             if (is_array($paramsyntax))
             {
@@ -274,17 +400,14 @@
                     
                     if (isset($prm['required']) && !empty($prm['required'])) {
                         if (!isset($data[$key])) {
-                            $this->paramerror = $this->doError(sprintf('required parameter "%s" was not found', $key));
-                            return;                         
+                            return sprintf('required parameter "%s" was not found', $key);
                         }
                     }
                 }
-            }			
-			
-			return $data;
-		}
+            }           
+        }
 
-		
+        
         //perform type test to enum.
         /*
             required parameter syntax key is:
@@ -300,7 +423,7 @@
             $input = strtoupper($input);
             
             if (!isset($ps['options']) || !is_array($ps['options'])) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is expecting enum "options" but not found', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting enum "options" but not found', $parameter));
                 return;
             }
             
@@ -312,7 +435,7 @@
                     if ($ps['default'] == $enumkey) $defaultfound = true;
                 }
                 if (!$defaultfound) {
-                    $this->paramerror = $this->doError(sprintf('required parameter "%s" default enum [ %s ] is not one of the following [ %s ]', $parameter, $ps['default'], implode(' | ', $ps['options'])));
+                    $this->paramerror = $this->err(sprintf('required parameter "%s" default enum [ %s ] is not one of the following [ %s ]', $parameter, $ps['default'], implode(' | ', $ps['options'])));
                     return;                        
                 }
             }
@@ -325,12 +448,12 @@
             if (!$found)
             {
                 if (!empty($ps['mustexist'])) {
-                    $this->paramerror = $this->doError(sprintf('required parameter "%s" [ %s ] is not one of the following [ %s ]', $parameter, $input, implode(' | ', $ps['options'])));
+                    $this->paramerror = $this->err(sprintf('required parameter "%s" [ %s ] is not one of the following [ %s ]', $parameter, $input, implode(' | ', $ps['options'])));
                     return;
                 }
                 
                 if (empty($ps['default'])) {
-                    $this->paramerror = $this->doError(sprintf('required parameter "%s" has no default from enum options [ %s ]', $parameter, implode(' | ', $ps['options'])));
+                    $this->paramerror = $this->err(sprintf('required parameter "%s" has no default from enum options [ %s ]', $parameter, implode(' | ', $ps['options'])));
                     return;
                 }                        
                 
@@ -353,7 +476,7 @@
                     $input = json_decode($ps['default'], 1);
                 } else {
                     if (isset($ps['required'])) {
-                        $this->paramerror = $this->doError(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                        $this->paramerror = $this->err(sprintf('array $data[%s] is expected but not found', $parameter, $key));
                         return;
                     }
                 }
@@ -361,7 +484,7 @@
                 {
                     if (isset($ps['required'])) 
                     {
-                        $this->paramerror = $this->doError(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                        $this->paramerror = $this->err(sprintf('array $data[%s] is expected but not found', $parameter, $key));
                         return;
                     }
                     $input = [];
@@ -369,12 +492,12 @@
             }
             
             if (isset($ps['min-count']) && (count($input) < $ps['min-count'])) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is expecting %d elements but %d found', $parameter, $ps['min-count'], count($input)));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting %d elements but %d found', $parameter, $ps['min-count'], count($input)));
                 return;
             }
             
             if (!is_array($input)) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is expecting to be array type but its not. Use valid "default" JSON', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting to be array type but its not. Use valid "default" JSON', $parameter));
                 return;
             }
             
@@ -383,7 +506,7 @@
                 foreach ($requiredkeys as $key) {
                     $key = trim($key);
                     if (!isset($input[$key])) {
-                        $this->paramerror = $this->doError(sprintf('array key $%s[%s] was expected but not found', $parameter, $key));
+                        $this->paramerror = $this->err(sprintf('array key $%s[%s] was expected but not found', $parameter, $key));
                         return;
                     }
                 }
@@ -403,7 +526,7 @@
         private function doBooleanParameterTypeTest(&$input, $parameter, $ps = [])
         {
             if ($input == '' && $ps['fail-if-empty']) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
             }
             
             if ($input == '' && isset($ps['default'])) {
@@ -411,11 +534,11 @@
             }
             
             if ((!$input) && isset($ps['fail-if-false'])) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is false and "fail-if-false" flag is set', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is false and "fail-if-false" flag is set', $parameter));
             }
             
             if (($input) && isset($ps['fail-if-true'])) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
             }   
             
             $input = sprintf('%b', $input);
@@ -433,7 +556,7 @@
         private function doIntegerParameterTypeTest(&$input, $parameter, $ps = []) {
             //return error if empty
             if ($input == '' && $ps['fail-if-empty']) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
             }
             
             $input = sprintf('%d', $input);
@@ -455,7 +578,7 @@
             
             //in case of zero we return error
             if ($input == 0 && $ps['required']) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
             }                   
             
         }
@@ -496,7 +619,7 @@
             //require string length
             if (!empty($ps['length'])) {
                 if (strlen($input) != $ps['length'])
-                    $this->paramerror = $this->doError(sprintf('required parameter "%s" is not length of %d but %d instead', $parameter, $ps['length'], strlen($input)));
+                    $this->paramerror = $this->err(sprintf('required parameter "%s" is not length of %d but %d instead', $parameter, $ps['length'], strlen($input)));
             }
             
             //convert special chars to htmlentities
@@ -516,110 +639,12 @@
             
             //return error if empty
             if ($input == '' && $ps['required']) {
-                $this->paramerror = $this->doError(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
             }
-        }		
+        }       
 
-        /* Result is returning JSON encoded successful response with statusCode 200 and Body */
-        public function doOk($data = '', $pagination = []) 
-        {
-            $this->doWrapMetadata();
-            
-            //success - 200
-            if (is_string($data)) $data = trim($data);
-            if (empty($data)) {
-                //return as a boolean
-                $data = ['code' => $this->success_status, 'success' => sprintf('%b', $data)];
-            } else
-            if (is_object($data)) {
-                $data = ['code' => $this->success_status, 'result' => $data];
-            } else                
-            if (!is_array($data)) 
-            {
-                //result as a string message
-                $data = ['code' => $this->success_status, 'result' => $data];
-            } else
-            {
-                //result as an array
-                $return = $data;
-                foreach ($pagination as $k => $v) {
-                    if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
-                        $return[$k] = $v;
-                }
-                
-                $data = ['code' => $this->success_status, 'records' => $return];
-            }
-    
-            $result = json_encode([
-                'statusCode' => $this->success_status,
-                'body' => json_encode(
-                    [
-                        'status' => "success",
-                        'data' => $data,
-                        'timestamp' => time(),
-                        '@metadata' => $this->metadata
-                    ], JSON_FORCE_OBJECT),
-            ]);
-            
-            return $result;
-        }
-        
-        
-        /* Result is returning JSON encoded error message with statusCode 400 and Body */
-        public function doError($data = '') 
-        {
-            $this->doWrapMetadata();
-
-            //error - 400
-            if (is_string($data)) $data = trim($data);
-            if (empty($data)) {
-                //return as a boolean
-                $data = ['code' => $this->error_bad_request, 'error' => 1];
-            } else
-            if (is_object($data)) {
-                $data = ['code' => $this->error_bad_request, 'message' => $data, 'methods' => get_class_methods($data)];
-            } else                
-            if (!is_array($data)) 
-            {
-                //result as a string message
-                $data = ['code' => $this->error_bad_request, 'message' => $data];
-            } else
-            {
-                //result as an array
-                $data = ['code' => $this->error_bad_request, 'message' => $data];
-            }
-            
-            $result = json_encode([
-                'statusCode' => $this->error_bad_request,
-                'body' => json_encode(
-                    [
-                        'status' => "error",
-                        'data' => $data,
-                        'timestamp' => time(),
-                        '@metadata' => $this->metadata
-                    ], JSON_FORCE_OBJECT),
-            ]);
-            
-            return $result;                
-        }
-        
-        //end execution without encoding result
-        public function doPlain($data)
-        {
-            $this->doWrapMetadata();
-            return $data;
-        }
-        
-        //function is doing some last minute calculations for stats and timeout detection purposes
-        private function doWrapMetadata()
-        {
-            $this->metadata['timer']['ended_at_microtime'] = intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3));
-            //calculate execution time
-            $this->metadata['timer']['execution_time'] = $this->metadata['timer']['ended_at_microtime'] - $this->metadata['timer']['started_at_microtime'];
-        }        
-            
         function paramDecrypt($data) {
-            if (!isset($data)) return false;
+            if (!isset($data)) return 1;
             
             if (is_array($data)) {
                 if (count($data)) {
@@ -634,47 +659,21 @@
         }
         
         
-        /* encrypting string with key and salt */
-        protected function __doStringDecrypt($data) 
-        {
-            if (empty($data['input'])) {
-                return $helper->doError('noting to decrypt');
-            }
-            
-            if (empty($this->salt)) {
-                return $this->doError('decryption SALT is not defined');
-            }
-            
-            if (empty($this->config['encryption_key'])) {
-                return $this->doError('decryption key in config file is not set');
-            }
-            
-            $encrypt_method = "AES-256-CBC";
-            $key = hash('sha256', $this->config['encryption_key']);
-            
-            // iv - encrypt method AES-256-CBC expects 16 bytes - else you will get a warning
-            $iv = substr(hash('sha256', $this->salt), 0, 16);
-            
-            $output = openssl_decrypt(base64_decode($data['input']), $encrypt_method, $key, 0, $iv);
-            
-            return $this->doOk($output);
-        }        
-        
-        
+
         
         /* encrypting string with key and salt */
         private function __doStringEncrypt($data) 
         {
             if (empty($data['input'])) {
-                return $this->doError('noting to encrypt');
+                return $this->err('noting to encrypt');
             }
             
             if (empty($this->salt)) {
-                return $this->doError('encryption SALT is not defined');
+                return $this->err('encryption SALT is not defined');
             }
             
             if (empty($this->config['encryption_key'])) {
-                return $this->doError('encryption key in config file is not set');
+                return $this->err('encryption key in config file is not set');
             }
             
             $encrypt_method = "AES-256-CBC";
@@ -686,19 +685,19 @@
             $output = openssl_encrypt($data['input'], $encrypt_method, $key, 0, $iv);
             $output = base64_encode($output);
             
-            return $this->doOk($output);
+            return $this->ok($output);
         }        
         
-        function strDecrypt($data) {
+        private function strDecrypt($data) {
             $output = 'result';
-            if ($err = $this->doExecute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->doError($err); return; }
+            if ($err = $this->execute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->err($err); return; }
             return $result;
         }
         
         
-        function strEncrypt($data) {
+        private function strEncrypt($data) {
             $output = 'result';
-            if ($err = $this->doExecute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->doError($err); return; }
+            if ($err = $this->execute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->err($err); return; }
             return $result;
         }
         
@@ -714,9 +713,9 @@
             return $this->paramDecrypt($itens);
         }            
 
-		protected function getSalt() {
-			return $this->salt;
-		}
-	}
+        private function getSalt() {
+            return $this->salt;
+        }
+    }
 
 ?>

@@ -17,35 +17,35 @@
                         'query' => "select * from `_aws_eu-north-1_functions`",
                         'keyholder' => 'aws_function_id'
                     ]
-                ])) return $helper->doError($err);
+                ])) return $helper->err($err);
                 
-                return $helper->doError($res);              
+                return $helper->err($res);              
             */                
             function __mysql_doQuery($data, $helper) 
             {
                 /* we remove those later */
-                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'keyholder']) return $helper->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'connection']) return $helper->err('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'keyholder']) return $helper->err('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'query']) return $helper->err('required parameter missing: [' . $tf . ']');
                 /* end of removing those */
                 
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
                 
                 if (!$res = $conn->query($data['query'])) {
-                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                    return $helper->err('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
                 }
                 
                 //no records return
                 if (!mysqli_num_rows($res)) {
                     if (isset($data['no-rows-error']) && $data['no-rows-error'] == true) {
-                        return $helper->doError('query returned zero results');
+                        return $helper->err('query returned zero results');
                     } else {
-                        return $helper->doOk(0);
+                        return $helper->ok(0);
                     }                    
                 }
                 
@@ -53,17 +53,17 @@
                 {
                     //no keyholder field in resultset
                     if (!isset($row[$data['keyholder']])) {
-                        return $helper->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
+                        return $helper->err(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
                     }
                     
                     if (!empty($result[$row[$data['keyholder']]])) {
-                        return $helper->doError(sprintf('keyholder "%s" with value "%s" is already existing in result. please choose unique id from resultset: [ %s ]', $data['keyholder'], $row[$data['keyholder']], implode(' | ', array_keys($row) )));
+                        return $helper->err(sprintf('keyholder "%s" with value "%s" is already existing in result. please choose unique id from resultset: [ %s ]', $data['keyholder'], $row[$data['keyholder']], implode(' | ', array_keys($row) )));
                     }
                     
                     $result[$row[$data['keyholder']]] = $row;
                 }
                 
-                return $helper->doOk($result);
+                return $helper->ok($result);
             }
             
             
@@ -79,32 +79,32 @@
                         'connection' => 'core',
                         'query' => "select * from `_aws_eu-north-1_functions`"
                     ]
-                ])) return $helper->doError($err);
+                ])) return $helper->err($err);
                 
-                return $helper->doError($res);              
+                return $helper->err($res);              
             */
             function __mysql_doVoidQuery($data, $helper) 
             {
                 //if(!isset(debug_backtrace()[1]['class']) || !in_array(debug_backtrace()[1]['class'], ['awshelpers']))
-                  //  return $helper->doError('access class prohibited');
+                  //  return $helper->err('access class prohibited');
                 
                 /* we remove those later */
-                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'query']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'connection']) return $helper->err('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'query']) return $helper->err('required parameter missing: [' . $tf . ']');
                 /* end of removing those */
                 
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
                 
                 if (!$res = $conn->query($data['query'])) {
-                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                    return $helper->err('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
                 }
                 
-                return $helper->doOk('query completed without errors');
+                return $helper->ok('query completed without errors');
             }
             
             
@@ -118,15 +118,15 @@
                         'connection' => 'core',
                         'query' => "select count(*) as `cnt` from `_aws_eu-north-1_functions`"
                     ]
-                ])) return $helper->doError($err);
+                ])) return $helper->err($err);
                 
-                return $helper->doError($res);          
+                return $helper->err($res);          
             */
             function __mysql_getCount($data, $helper)
             {
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
@@ -135,19 +135,19 @@
                 $data['keyholder'] = 'cnt';
                 
                 if (!$res = $conn->query($data['query'])) {
-                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                    return $helper->err('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
                 }
                 
                 if (!mysqli_num_rows($res)) {
-                    return $helper->doOk('0');
+                    return $helper->ok('0');
                 }
                 
                 $row = mysqli_fetch_assoc($res);
                 if (!isset($row[$data['keyholder']])) {
-                    return $helper->doError(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
+                    return $helper->err(sprintf('keyholder "%s" is missing from resultset: [ %s ]', $data['keyholder'], implode(' | ', array_keys($row) )));
                 }
                 
-                return $helper->doOk($row['cnt']);
+                return $helper->ok($row['cnt']);
                 
             }
             
@@ -167,16 +167,16 @@
                         ],
                         'connection' => 'core',
                     ]
-                ])) return $helper->doError($err);              
+                ])) return $helper->err($err);              
             */          
             function __mysql_doInsertOrUpdate($data, $helper)
             {
                 //get rid of later
-                if (empty($data['auto-increment-field'])) return $helper->doError('$data[auto-increment-field] is required but not defined in parameters');
+                if (empty($data['auto-increment-field'])) return $helper->err('$data[auto-increment-field] is required but not defined in parameters');
                 
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
@@ -199,7 +199,7 @@
                 $update = sprintf(print_r(json_decode($update['body'], 1)['data']['result'], 1));
 
                 //modify update query for the multiquery                
-                if (empty($ini = strpos($update, $start = ' SET '))) return $helper->doError('trim error');
+                if (empty($ini = strpos($update, $start = ' SET '))) return $helper->err('trim error');
                 $ini += strlen($start);
                 $len = strpos($update, $end = ' WHERE ', $ini) - $ini;
 
@@ -211,14 +211,14 @@
 
                 if (!$res = $conn->multi_query($query)) {
                     while ($conn->next_result()) { if (!$conn->more_results()) break; }
-                    return $helper->doError('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
+                    return $helper->err('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
                 }               
                 
                 // flush multi_queries
                 while ($conn->next_result()) { if (!$conn->more_results()) break; }
                 
                 //get touched id
-                return $helper->doOk(mysqli_insert_id($conn));
+                return $helper->ok(mysqli_insert_id($conn));
             }
 
 
@@ -236,8 +236,8 @@
                             'third' => 'yeah'
                         ]
                     ]
-                ])) return $helper->doError($err);
-                return $helper->doOk($query);
+                ])) return $helper->err($err);
+                return $helper->ok($query);
             */          
             function __mysql_constructInsertQuery($data, $helper) {
                 $packed = array();
@@ -252,7 +252,7 @@
                 //for mysql functions we use !!!NOW()!!!
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
                 
-                return $helper->doOk($query);               
+                return $helper->ok($query);               
             }
             
 
@@ -275,22 +275,22 @@
                             'fk_order_id'
                         ]
                     ]
-                ])) return $helper->doError($err);
-                return $helper->doOk($query);
+                ])) return $helper->err($err);
+                return $helper->ok($query);
             */
             function __mysql_constructUpdateQuery($data, $helper)
             {
-                if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'tablename']) return $helper->err('required parameter missing: [' . $tf . ']');
                 
                 foreach ($data['keys'] as $void => $key)
                 {
-                    if (!isset($data['fields'][$key])) return $helper->doError('fields[' . $key . '] is not defined in input params');
+                    if (!isset($data['fields'][$key])) return $helper->err('fields[' . $key . '] is not defined in input params');
                     $wherequery[] = sprintf('`%s` = \'%s\'', $key, addslashes($data['fields'][$key]));
                     unset($data['fields'][$key]);
                 }
                 $where = implode(' AND ', $wherequery);
                 if (!$where) {
-                    return $helper->doError('where clause is not defined for count query.');
+                    return $helper->err('where clause is not defined for count query.');
                 }
                 
                 $packed = array();
@@ -300,7 +300,7 @@
                 }
                 
                 if (!count($packed)) {
-                    return $helper->doError('no parameters to update in SQL query');
+                    return $helper->err('no parameters to update in SQL query');
                 }
                 
                 $query = sprintf("UPDATE `%s` SET %s WHERE %s", $data['tablename'], implode(', ', $packed), $where);
@@ -309,7 +309,7 @@
                 //remove escaping
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
 
-                return $helper->doOk($query);               
+                return $helper->ok($query);               
             }
             
 
@@ -328,28 +328,28 @@
                         'singleexpected' => 1,
                         'connection' => 'core'
                     ]
-                ])) return $helper->doError($err);                
+                ])) return $helper->err($err);                
             */          
             function __mysql_getSingleCellValue($data, $helper) {
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
                 
                 //kaob ära, kui me saame kasutada parameetri kontrollimise funktsiooni
-                if (!$data[$tf = 'connection']) return $helper->doError('required parameter missing: [' . $tf . ']');
-                if (!$data[$tf = 'tablename']) return $helper->doError('required parameter missing: [' . $tf . ']');
-                if (!count($data[$tf = 'where'])) return $helper->doError('array is not defined: [' . $tf . ']');
+                if (!$data[$tf = 'connection']) return $helper->err('required parameter missing: [' . $tf . ']');
+                if (!$data[$tf = 'tablename']) return $helper->err('required parameter missing: [' . $tf . ']');
+                if (!count($data[$tf = 'where'])) return $helper->err('array is not defined: [' . $tf . ']');
                 
                 if (!isset($data['column']) or $data['column'] == '') {
-                    return $helper->doError('"column" input parameter is not defined for $mysql->__mysql_getSingleCellValue()');
+                    return $helper->err('"column" input parameter is not defined for $mysql->__mysql_getSingleCellValue()');
                 }
                 foreach ($data['where'] as $key => $value) 
                 {
                     if (is_null($value) or empty(trim($value))) {
-                        return $helper->doError(
+                        return $helper->err(
                             sprintf('when performing getSingleCellValue() $data["where"]["%s"] key had no value. use parameter empty-value-ok to bypass this message', $key)
                         );
                     }
@@ -357,35 +357,35 @@
                 }
                 $where = implode(' AND ', $wherequery);
                 if (!$where) {
-                    return $helper->doError('where clause is not defined for count query.');
+                    return $helper->err('where clause is not defined for count query.');
                 }
                 
                 $query = sprintf("SELECT * FROM `%s` WHERE %s", $data['tablename'], $where);
 
                 if (!$res = $conn->query($query)) {
-                    return $helper->doError($conn->error);
+                    return $helper->err($conn->error);
                 }
                 
                 if (empty(mysqli_num_rows($res))) {
-                    return $helper->doError('no records retrieved from $mysql->__mysql_getSingleCellValue():');
+                    return $helper->err('no records retrieved from $mysql->__mysql_getSingleCellValue():');
                 }
                 
                 if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
-                    return $helper->doError(sprintf('$mysql->__mysql_getSingleCellValue() returned more than one row: (%d rows)', mysqli_num_rows($res)));
+                    return $helper->err(sprintf('$mysql->__mysql_getSingleCellValue() returned more than one row: (%d rows)', mysqli_num_rows($res)));
                 }
                 
                 $row = mysqli_fetch_assoc($res);
                 
                 if (!array_key_exists($data['column'], $row)) {
-                    return $helper->doError(sprintf('$mysql->__mysql_getSingleCellValue() result didnt consist field %s [ %s ]', $data['column'], implode(' | ', array_key_exists($row))));
+                    return $helper->err(sprintf('$mysql->__mysql_getSingleCellValue() result didnt consist field %s [ %s ]', $data['column'], implode(' | ', array_key_exists($row))));
                 }
                 
                 $value = $row[$data['column']];
                 if ($value == '') {
-                    return $helper->doError('NULL');
+                    return $helper->err('NULL');
                 }
                 
-                return $helper->doOk($value);               
+                return $helper->ok($value);               
             }
 
 
@@ -403,14 +403,14 @@
                                 'function_name' => $function
                             ]
                         ]
-                    ])) return $helper->doError($err);
+                    ])) return $helper->err($err);
                 
             */
             
             function __mysql_doSoftDelete($data, $helper) {
                 //check if connection is established
                 if (!$helper->metadata['connections'][$data['connection']]['established']) {
-                    return $helper->doError('connection to database is not established: %s', $data['connection']);
+                    return $helper->err('connection to database is not established: %s', $data['connection']);
                 } else {
                     $conn = $helper->metadata['connections'][$data['connection']]['object'];
                 }
@@ -420,16 +420,16 @@
                 }
                 $where = implode(' AND ', $wherequery);
                 if (!$where) {
-                    return $helper->doError('where clause is not defined for count query.');
+                    return $helper->err('where clause is not defined for count query.');
                 }
                 
                 $query = "UPDATE `%s` SET `%s` = 1 WHERE %s";
                 $makequery = sprintf($query, $data['tablename'], $data['keyholder'], $where);
                 if (!$conn->query($makequery)) {
-                    return $helper->doError($conn->error);
+                    return $helper->err($conn->error);
                 }
                 
-                return $helper->doOk(mysqli_insert_id($conn));
+                return $helper->ok(mysqli_insert_id($conn));
             }       
             
         }
