@@ -4,6 +4,9 @@
     {
         //declare protected inheritable variables
         private $returned = 0;
+        private $lifetime_executions = 0;
+        private $systemparams = [];
+        
         private $configfile = '/opt/config/configuration.json';
         private $config_dir;
         private $function_parameters_dir;
@@ -16,10 +19,13 @@
         public $aws_region;
         public $metadata = [];
         public $version = '1.1.0';
+        public $last_error;
     
         //will be launched when we start a new server infinite loop
         public function initialization($function) 
         {
+            $this->lifetime_executions = 0;
+            
             $this->config_dir = '/opt/config/';
             $this->function_parameters_dir = $this->config_dir . 'params/';
             $this->system_parameters_dir = $this->function_parameters_dir . 'system/';
@@ -32,6 +38,9 @@
             
             $this->metadata['paramsyntax'] = $this->loadFunctionParameters($function);
             
+            //load system function parameters
+            $this->loadSystemFunctionParameters();
+            
             //anything we return here will be displayed as an error in bootstrap
             //for example: return "error occured"
         }
@@ -41,21 +50,33 @@
         //will be started prior every run
         public function prepare(&$data, $customparams = NULL) 
         {
+            //reset the return counter
+            //$this->metadata['uku'] = $this->metadata['paramsyntax'];
+            
+            $this->returned = 0;
+            
             // read request headers and see what we get from there
             if ($err = $this->readHeaders($data))
                 return $err;
-                
+
             //read request body
             if ($err = $this->readBody($data)) {
                 return $err;
             }
             
             //clean and validate parameters
-            return $this->performParameterCheck($data, $customparams ?: NULL);
-            
+            if (!$response = $this->performParameterCheck($data, is_null($customparams) ? NULL : $customparams)) {
+                return $response;
+            }
+
             //anything we return here will be displayed as an error in bootstrap
             //for example: return "error occured"
         }        
+        
+        public function getSystemFunctionParameters($function_name) {
+            if (isset($this->systemparams[$function_name]))
+                return $this->systemparams[$function_name];
+        }
         
         
         //if user has ever requested function $this->ok or $this->err in function
@@ -72,11 +93,20 @@
         public function hasContent($variable = NULL) {
             return (isset($variable) && !empty($variable));
         }
+        
+        public function seterr($error) {
+            $this->last_error = $this->err($error);
+            $this->returned++;
+            return false;
+        }
 
         //generating general public error message json with payload
         public function err($data = NULL)
         {
-            if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
+            /*if (debug_backtrace()[1]['function'] == 'run')*/ {
+                $this->returned++;
+                $this->lifetime_executions++;
+            }
             $this->timerstop();
             $this->returnStatus = 400;
 
@@ -118,7 +148,10 @@
         //generating general public success message json with payload
         public function ok($data = NULL)
         {
-            if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
+            /*if (debug_backtrace()[1]['function'] == 'run') */ {
+                $this->returned++;
+                $this->lifetime_executions++;
+            }
             $this->timerstop();
             $this->returnStatus = 200;
             //success - 200
@@ -165,7 +198,7 @@
             return $result;
         }   
         
-        
+
         //PRIVATE FUNCTION DECLARATIONS
         /* we load default paramsyntax for the requester function */
         private function loadFunctionParameters($function_name) 
@@ -177,10 +210,32 @@
                 } catch (Exception $e) {
                     $paramsyntax = [];
                 }
-            } else $paramsyntax = [];
-            
-            $this->metadata['paramsyntax'] = $paramsyntax;
+            }
+            return $paramsyntax;
         }
+        
+        
+        private function loadSystemFunctionParameters()
+        {
+            if (file_exists($this->system_parameters_dir)) 
+            {
+                $contents = scandir($this->system_parameters_dir);
+                foreach ($contents as $void => $content) 
+                {
+                    if ($match = preg_match('/^__[_a-zA-Z0-9]+.json$/', $content)) 
+                    {
+                        //$funcname = trim($content, '.json');
+                        //if (empty($funcname)) continue;
+                        
+                        $json = file_get_contents($this->system_parameters_dir . $content);
+                        if (empty($json)) continue;
+                        $this->systemparams[str_replace('.json', '', $content)] = json_decode($json, 1);
+                    } 
+                }
+                if (!$this->systemparams) $this->systemparams = [];
+            } else $this->systemparams = [];
+        }
+        
         
         //stopping the execution timer to calculate total execution time.
         //lambda lag will be added to your lambda billing
@@ -220,6 +275,7 @@
         
         private function getMetadata() {
             $this->metadata['returned'] = $this->returned;
+            $this->metadata['lifetime_cycles'] = $this->lifetime_executions;
             return $this->metadata;
         }
         
@@ -328,18 +384,20 @@
                 }                    
             }           
         }
+        
+        
+        public function performSystemParameterCheck(&$input, $rules) {
+            return $this->performParameterCheck($input, $rules, true);
+        }
             
             
-        private function performParameterCheck(&$data, $customparams = NULL)
+        private function performParameterCheck(&$data, $customparams = NULL, $dry_run = NULL)
         {
-            if ($this->hasElements($customparams)) {
-                $this->metadata['paramsyntax'] = $customparams;
-            }
-            
-            if ($this->hasElements($this->metadata['paramsyntax']))
+            if ($this->hasElements(@$customparams)) {
+                $paramsyntax = $customparams;
+            } else {
                 $paramsyntax = $this->metadata['paramsyntax'];
-            else
-                $paramsyntax = [];
+            }
             
             if ($this->hasElements($data))
             {
@@ -359,7 +417,8 @@
                         if (isset($paramsyntax[$paramkey])) 
                         {
                             //param formatting and checks that dont halt the execution
-                            $this->metadata['params']['accepted'][$paramkey] = 1;
+                            if (empty($dry_run))
+                                $this->metadata['params']['accepted'][$paramkey] = 1;
                             
                             $ps = $paramsyntax[$paramkey];
                             
@@ -395,7 +454,8 @@
                             
                         } else {
                             //move parameter to unexpected parameters list
-                            $this->metadata['params']['unexpected'][$paramkey] = 1;
+                            if (empty($dry_run)) 
+                                $this->metadata['params']['unexpected'][$paramkey] = 1;
                             unset($data[$paramkey]);    
                         }                       
                     }
@@ -407,7 +467,8 @@
                             - parameter uses characters that are not allowed in parameter
                             - parameter key starts with - for example 
                         */
-                        $this->metadata['params']['ignored']++;
+                        if (empty($dry_run)) 
+                            $this->metadata['params']['ignored']++;
                         unset($data[$paramkey]);
                     }
                 }
@@ -428,7 +489,9 @@
                         }
                     }
                 }
-            }           
+            }
+            
+            return false;
         }
 
         
@@ -447,7 +510,7 @@
             $input = strtoupper($input);
             
             if (!isset($ps['options']) || !is_array($ps['options'])) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting enum "options" but not found', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is expecting enum "options" but not found', $parameter));
                 return;
             }
             
@@ -459,7 +522,7 @@
                     if ($ps['default'] == $enumkey) $defaultfound = true;
                 }
                 if (!$defaultfound) {
-                    $this->paramerror = $this->err(sprintf('required parameter "%s" default enum [ %s ] is not one of the following [ %s ]', $parameter, $ps['default'], implode(' | ', $ps['options'])));
+                    $this->paramerror = (sprintf('required parameter "%s" default enum [ %s ] is not one of the following [ %s ]', $parameter, $ps['default'], implode(' | ', $ps['options'])));
                     return;                        
                 }
             }
@@ -472,12 +535,12 @@
             if (!$found)
             {
                 if (!empty($ps['mustexist'])) {
-                    $this->paramerror = $this->err(sprintf('required parameter "%s" [ %s ] is not one of the following [ %s ]', $parameter, $input, implode(' | ', $ps['options'])));
+                    $this->paramerror = (sprintf('required parameter "%s" [ %s ] is not one of the following [ %s ]', $parameter, $input, implode(' | ', $ps['options'])));
                     return;
                 }
                 
                 if (empty($ps['default'])) {
-                    $this->paramerror = $this->err(sprintf('required parameter "%s" has no default from enum options [ %s ]', $parameter, implode(' | ', $ps['options'])));
+                    $this->paramerror = (sprintf('required parameter "%s" has no default from enum options [ %s ]', $parameter, implode(' | ', $ps['options'])));
                     return;
                 }                        
                 
@@ -500,7 +563,7 @@
                     $input = json_decode($ps['default'], 1);
                 } else {
                     if (isset($ps['required'])) {
-                        $this->paramerror = $this->err(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                        $this->paramerror = (sprintf('array $data[%s] is expected but not found', $parameter, $key));
                         return;
                     }
                 }
@@ -508,7 +571,7 @@
                 {
                     if (isset($ps['required'])) 
                     {
-                        $this->paramerror = $this->err(sprintf('array $data[%s] is expected but not found', $parameter, $key));
+                        $this->paramerror = (sprintf('array $data[%s] is expected but not found', $parameter, $key));
                         return;
                     }
                     $input = [];
@@ -516,12 +579,12 @@
             }
             
             if (isset($ps['min-count']) && (count($input) < $ps['min-count'])) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting %d elements but %d found', $parameter, $ps['min-count'], count($input)));
+                $this->paramerror = (sprintf('required parameter "%s" is expecting %d elements but %d found', $parameter, $ps['min-count'], count($input)));
                 return;
             }
             
             if (!is_array($input)) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is expecting to be array type but its not. Use valid "default" JSON', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is expecting to be array type but its not. Use valid "default" JSON', $parameter));
                 return;
             }
             
@@ -530,7 +593,7 @@
                 foreach ($requiredkeys as $key) {
                     $key = trim($key);
                     if (!isset($input[$key])) {
-                        $this->paramerror = $this->err(sprintf('array key $%s[%s] was expected but not found', $parameter, $key));
+                        $this->paramerror = (sprintf('array key $%s[%s] was expected but not found', $parameter, $key));
                         return;
                     }
                 }
@@ -549,8 +612,8 @@
         
         private function doBooleanParameterTypeTest(&$input, $parameter, $ps = [])
         {
-            if ($input == '' && $ps['fail-if-empty']) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
+            if ($input == '' && $ps['empty-is-error'] == 1) {
+                $this->paramerror = (sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
             }
             
             if ($input == '' && isset($ps['default'])) {
@@ -558,11 +621,11 @@
             }
             
             if ((!$input) && isset($ps['fail-if-false'])) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is false and "fail-if-false" flag is set', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is false and "fail-if-false" flag is set', $parameter));
             }
             
             if (($input) && isset($ps['fail-if-true'])) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
             }   
             
             $input = sprintf('%b', $input);
@@ -580,7 +643,7 @@
         private function doIntegerParameterTypeTest(&$input, $parameter, $ps = []) {
             //return error if empty
             if ($input == '' && $ps['fail-if-empty']) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
             }
             
             $input = sprintf('%d', $input);
@@ -602,7 +665,7 @@
             
             //in case of zero we return error
             if ($input == 0 && $ps['required']) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
             }                   
             
         }
@@ -643,7 +706,7 @@
             //require string length
             if (!empty($ps['length'])) {
                 if (strlen($input) != $ps['length'])
-                    $this->paramerror = $this->err(sprintf('required parameter "%s" is not length of %d but %d instead', $parameter, $ps['length'], strlen($input)));
+                    $this->paramerror = (sprintf('required parameter "%s" is not length of %d but %d instead', $parameter, $ps['length'], strlen($input)));
             }
             
             //convert special chars to htmlentities
@@ -663,7 +726,7 @@
             
             //return error if empty
             if ($input == '' && $ps['required']) {
-                $this->paramerror = $this->err(sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
             }
         }       
 
@@ -689,15 +752,15 @@
         private function __doStringEncrypt($data) 
         {
             if (empty($data['input'])) {
-                return $this->err('noting to encrypt');
+                return ('noting to encrypt');
             }
             
             if (empty($this->salt)) {
-                return $this->err('encryption SALT is not defined');
+                return ('encryption SALT is not defined');
             }
             
             if (empty($this->config['encryption_key'])) {
-                return $this->err('encryption key in config file is not set');
+                return ('encryption key in config file is not set');
             }
             
             $encrypt_method = "AES-256-CBC";
@@ -714,14 +777,14 @@
         
         private function strDecrypt($data) {
             $output = 'result';
-            if ($err = $this->execute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->err($err); return; }
+            if ($err = $this->execute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = ($err); return; }
             return $result;
         }
         
         
         private function strEncrypt($data) {
             $output = 'result';
-            if ($err = $this->execute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = $this->err($err); return; }
+            if ($err = $this->execute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = ($err); return; }
             return $result;
         }
         
