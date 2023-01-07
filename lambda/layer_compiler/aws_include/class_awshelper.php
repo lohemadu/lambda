@@ -1,766 +1,309 @@
 <?php
 
-    class corebase 
-    {
-        //declare protected inheritable variables
-        private $returned = 0;
-        private $lifetime_executions = 0;
-        private $systemparams = [];
-        
-        private $configfile = '/opt/config/configuration.json';
-        private $config_dir;
-        private $function_parameters_dir;
-        private $system_parameters_dir;        
+    define('__L4H_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
 
-        protected $config = [];
+    define('__MYSQL_ESTABLISH_CONNECTION__', 'doEstablishSQLConnection');
+    define('__MYSQL_GET_CONNECTION__', 'getConnection');
+    define('__MYSQL_GET_QUERYSET__', 'mysql_doQuery');
+    define('__MYSQL_GET_COUNT__', 'mysql_getCount');
+
+    class awshelper extends corebase
+    {   
+        //private key
+        private $salt = "TjZpB8609WkpKG5ftdvQ";
+        private $functionparams = [];
         
-        //public variables
-        public $task = [];
-        public $aws_region;
-        public $metadata = [];
-        public $version = '1.1.0';
-        public $last_error;
-    
-        //will be launched when we start a new server infinite loop
-        public function initialization($function) 
+        public $metadata; //execution related metadata
+        public $method; // POST | GET
+        public $paramerror;
+        
+        public $version;
+        
+        /*
+            MOTHER OF ALL PRIVATE FUNCTIONS - execute()
+            
+            wrapper to call all this class private functions with ['command' => 'funcname'()]
+            
+            returns result in case of error only.
+            if no error, $successresult will return the message from the function
+            
+            $output = 'quantity';
+            if ($err = $this->executer(${$output}, [
+                'command' => 'mysql_getCount',
+                'parameters' => [
+                    'connection' => 'core',
+                    'query' => $query
+                ]
+            ])) return $this->error($err);            
+        */  
+
+        function execute(&$successresult, $data) 
         {
-            $this->lifetime_executions = 0;
-            
-            $this->config_dir = '/opt/config/';
-            $this->function_parameters_dir = $this->config_dir . 'params/';
-            $this->system_parameters_dir = $this->function_parameters_dir . 'system/';
-        
-            //constructing basic class metadata
-            $this->constructMetadata($function);            
+            $data['command'] = trim($data['command'], '_');
 
-            //read in global configuration
-            $this->readConfig(); 
+            //check for command
+            if (empty($data['command'])) 
+                return 'Function command was not provided in a Execute Call from: ' . debug_backtrace()[0]['function'];
+                
+            if (!is_string($data['command'])) {
+                return 'Function command has to be String in format of ( _a-zA-Z )';
+            }
             
-            $this->metadata['paramsyntax'] = $this->loadFunctionParameters($function);
+            //construct function name
+            $command = sprintf('__%s', $data['command']);
             
-            //load system function parameters
-            $this->loadSystemFunctionParameters();
+            //make parameter test for $command
+            $sysparams = $this->getSystemFunctionParameters($command);
+            if (empty($this->hasElements($sysparams))) {
+                return 'Unable to locate function parameters in system functions folder for function: ' . $command . '()';
+            } else {
+                $restresult = $this->performSystemParameterCheck($data['parameters'], $sysparams);
+                if (!empty($restresult)) {
+                    return $restresult;
+                }
+            }
+            //return  print_r($sysparams, 1);
+
+            //construct database connection if param 'connection' is provided
+            //this is always our mysql trigger
+            if ($this->hasContent(@$data['parameters']['connection']))
+            {
+                //connection not yet created
+                if (!isset($this->metadata['connections'][$data['parameters']['connection']]['object']) && $data['command'] != __MYSQL_ESTABLISH_CONNECTION__
+                ) {
+                    if ($err = $this->execute(${$output = 'conn'}, [
+                        'command' => __MYSQL_ESTABLISH_CONNECTION__, 
+                        'parameters' => [
+                            'connection' => $data['parameters']['connection']
+                        ]
+                    ])) { return $err; }
+                }
+            }
+
+            //check if command is in format of someclass_runImportantMethod
+            $potential_class = $this->parseExternalModuleClass($data['command']);
+            if (is_string($potential_class)) 
+                return 'Command Incorrect: ' . $data['command'] . '()';
+                
+            $external = $internal = false;
+            if (is_array($potential_class) && count($potential_class) && ($potential_class['class'])) 
+            {
+                //need to run through $module->method
+                if ($ext_error = $this->prepareModule($potential_class, $module)) {
+                    return $ext_error;
+                } else $external = true;
+            } else {
+                //need to run via $this->method
+                if (!$internal_error = $this->prepareSelf($data['command'])) {
+                    return $internal_error;
+                } else $internal = true;
+            }
             
-            //anything we return here will be displayed as an error in bootstrap
-            //for example: return "error occured"
+            $class_used = '';
+            
+            try {
+                if ($external) {
+                    if (isset($data['parameters']['connection'])) {
+                        //replace connection slug with connection object
+                        $data['parameters']['connection'] = $this->metadata['connections'][$data['parameters']['connection']]['object'];
+                    }
+                    $result = call_user_func_array(array($module, $command), array($data['parameters'] ?? []));
+                    $class_used = get_class($module);
+                }
+                else if ($internal) {
+                    if (isset($data['parameters']['connection'])) 
+                        if ($data['command'] != __MYSQL_ESTABLISH_CONNECTION__)
+                            if ($data['command'] != __MYSQL_GET_CONNECTION__)
+                    {
+                        //replace connection slug with connection object
+                        $data['parameters']['connection'] = $this->metadata['connections'][$data['parameters']['connection']]['object'];
+                    }                    
+                    $result = call_user_func_array(array($this, $command), array($data['parameters'] ?? []));
+                    $class_used = 'this';
+                }
+            }
+            catch(Exception $e) { return $e->getMessage(); }
+            catch(Throwable $t) { return $t->getMessage(); }
+            
+            //detect what kind of result was sent            
+            if (isset($result['inner'])) {
+                if (isset($result['success'])) {
+                    $successresult = $result['message'];    
+                    return false;
+                } else 
+
+                if (!empty($result['error']))
+                {
+                    return $result['message'];
+                } else { 
+                    return sprintf('$%s->%s() was expecting [ return innerok($success_confirmation) || return innererr($error) ] but empty return found: ' . print_r($result, 1),
+                        $class_used, $command); 
+                }
+            } else { 
+                return sprintf('$%s->%s() was expecting [ return innerok($success_confirmation) || return innererr($error) ] but empty return found: ' . print_r($result, 1), 
+                    $class_used, $command);
+            }
         }
         
-        //PUBLIC SCOPE METHOD DECLARATIONS    
-        
-        //will be started prior every run
-        public function prepare(&$data, $customparams = NULL) 
-        {
-            //reset the return counter
-            //$this->metadata['uku'] = $this->metadata['paramsyntax'];
-            
-            $this->returned = 0;
-            
-            // read request headers and see what we get from there
-            if ($err = $this->readHeaders($data))
-                return $err;
-
-            //read request body
-            if ($err = $this->readBody($data)) {
-                return $err;
+        private function prepareSelf($command) {
+            if (!method_exists($this, $command)) {
+                return (sprintf('Unable to find Module method $%s->%s()', get_class($this), $command));
             }
             
-            //clean and validate parameters
-            if (!$response = $this->performParameterCheck($data, is_null($customparams) ? NULL : $customparams)) {
-                return $response;
-            }
-
-            //anything we return here will be displayed as an error in bootstrap
-            //for example: return "error occured"
+            if (!is_callable($this, $command)) {
+                return (sprintf('Module method $%s->%s() is not Callable', $module, $params['method']));
+            }            
+            
+            return false;
         }        
         
-        public function getSystemFunctionParameters($function_name) {
-            if (isset($this->systemparams[$function_name]))
-                return $this->systemparams[$function_name];
-        }
-        
-        
-        //if user has ever requested function $this->ok or $this->err in function
-        public function resultreturned() {
-            return $this->returned;
-        }
-        
-        /* by entering input parameters we return if element is array and can be forlooped */
-        public function hasElements($variable = NULL) {
-            return (isset($variable) && is_array($variable) && count($variable));
-        }
-        
-        //making sure the variable has a length and its defined
-        public function hasContent($variable = NULL) {
-            return (isset($variable) && !empty($variable));
-        }
-        
-        public function seterr($error) {
-            $this->last_error = $this->err($error);
-            $this->returned++;
+        //attempt to prepare external module and validate its integrity and test against parse error
+        private function prepareModule($params, &$resultclass) 
+        {
+            if (!file_exists($includefile = $params['include'])) {
+                $err = sprintf('Couldnt Include File %s');
+            }
+            
+            $module = $params['class'];
+            
+            if (empty($module)) return ('Invalid Module Name');
+            
+            //if module is already loaded dont repeat the creating
+            if (is_object(@$this->metadata['modules'][$module])) {
+                $resultclass = $this->metadata['modules'][$module];
+                //return false;
+            }            
+            
+            try {
+                require_once($includefile);
+                //class not found
+                if (!class_exists($module)) {
+                    return (sprintf('class %s was requested but not found in file %s', $module, $includefile));
+                }
+                //create class and assign
+                $this->metadata['modules'][$module] = new $module;
+            }
+            catch(Throwable $t) {
+                return ('Parse Error occured when including class file: ' . $includefile);
+            }
+            
+            if (!is_object($this->metadata['modules'][$module])) {
+                return (sprintf("Couldnt initialize $module and its method %s", $params['method']));
+            }            
+            
+            if (!method_exists($this->metadata['modules'][$module], $params['method'])) {
+                return (sprintf('Unable to find Module method $%s->%s()', $module, $params['method']));
+            }
+            
+            $resultclass = $this->metadata['modules'][$module];
             return false;
-        }
-
-        //generating general public error message json with payload
-        public function err($data = NULL)
+        }        
+        
+        
+        //for sending internal success message from $this->executer()
+        private function innerok($res) 
         {
-            /*if (debug_backtrace()[1]['function'] == 'run')*/ {
-                $this->returned++;
-                $this->lifetime_executions++;
-            }
-            $this->timerstop();
-            $this->returnStatus = 400;
-
-            //error - 400
-            if (is_string($data)) $data = trim($data);
-            if (empty($data)) {
-                //return as a boolean
-                $data = ['code' => $this->returnStatus, 'error' => 1];
-            } else
-            if (is_object($data)) {
-                $data = ['code' => $this->returnStatus, 'message' => $data, 'methods' => get_class_methods($data)];
-            } else                
-            if (!is_array($data)) 
-            {
-                //result as a string message
-                $data = ['code' => $this->returnStatus, 'message' => $data];
-            } else
-            {
-                //result as an array
-                $data = ['code' => $this->returnStatus, 'message' => $data];
-            }
-            
-            $json = json_encode(
-            [
-                'status' => "error",
-                'data' => $data,
-                'timestamp' => time(),
-                '@metadata' => $this->getMetadata()
-            ], JSON_FORCE_OBJECT);
-                    
-            $result = json_encode([
-                'statusCode' => $this->returnStatus,
-                'body' => $json,
-            ]);
-            
-            return $result; 
+            return [
+                'inner' => 1,
+                'success' => 1,
+                'message' => $res
+            ];
         }
-
-        //generating general public success message json with payload
-        public function ok($data = NULL)
+        
+        //for sending internal error message from $this->executer()
+        private function innererr($res) 
         {
-            /*if (debug_backtrace()[1]['function'] == 'run') */ {
-                $this->returned++;
-                $this->lifetime_executions++;
-            }
-            $this->timerstop();
-            $this->returnStatus = 200;
-            //success - 200
-            if (is_string($data)) $data = trim($data);
-            if (empty($data)) {
-                //return as a boolean
-                $data = ['code' => $this->returnStatus, 'success' => sprintf('%b', $data)];
-            } else
-            if (is_object($data)) {
-                $data = ['code' => $this->returnStatus, 'result' => $data];
-            } else                
-            if (!is_array($data)) 
-            {
-                //result as a string message
-                $data = ['code' => $this->returnStatus, 'result' => $data];
-            } else
-            {
-                //result as an array
-                $return = $data;
-                if ($this->hasElements(@$pagination))
-                {
-                    foreach ($pagination as $k => $v) {
-                        if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
-                            $return[$k] = $v;
-                    }
-                }
-                
-                $data = ['code' => $this->returnStatus, 'records' => $return];
-            }
-            
-            $json = json_encode(
-            [
-                'status' => "success",
-                'data' => $data,
-                'timestamp' => time(),
-                '@metadata' => $this->getMetadata(),
-            ], JSON_FORCE_OBJECT);
-                    
-            $result = json_encode([
-                'statusCode' => $this->returnStatus,
-                'body' => $json,
-            ]);
-            
-            return $result;
-        }   
+            return [
+                'inner' => 1,
+                'error' => 1,
+                'message' => $res
+            ];
+        }                 
         
-
-        //PRIVATE FUNCTION DECLARATIONS
-        /* we load default paramsyntax for the requester function */
-        private function loadFunctionParameters($function_name) 
+        /* attempting to get class preparation data from $command name */
+        private function parseExternalModuleClass($command) 
         {
-            if (file_exists($syntaxfile = $this->function_parameters_dir . $function_name . '.json')) {
-                $json = file_get_contents($syntaxfile);
-                try {
-                    $paramsyntax = json_decode($json, 1);
-                } catch (Exception $e) {
-                    $paramsyntax = [];
-                }
-            }
-            return $paramsyntax;
-        }
-        
-        
-        private function loadSystemFunctionParameters()
-        {
-            if (file_exists($this->system_parameters_dir)) 
-            {
-                $contents = scandir($this->system_parameters_dir);
-                foreach ($contents as $void => $content) 
-                {
-                    if ($match = preg_match('/^__[_a-zA-Z0-9]+.json$/', $content)) 
-                    {
-                        //$funcname = trim($content, '.json');
-                        //if (empty($funcname)) continue;
-                        
-                        $json = file_get_contents($this->system_parameters_dir . $content);
-                        if (empty($json)) continue;
-                        $this->systemparams[str_replace('.json', '', $content)] = json_decode($json, 1);
-                    } 
-                }
-                if (!$this->systemparams) $this->systemparams = [];
-            } else $this->systemparams = [];
-        }
-        
-        
-        //stopping the execution timer to calculate total execution time.
-        //lambda lag will be added to your lambda billing
-        private function timerstop()
-        {
-            if (empty($this->metadata['timer']['started_at_microtime'])) return;
-            else 
-                if ($this->metadata['timer']['started_at_microtime'] == 'N/A') return;
-
-            $this->metadata['timer']['ended_at_microtime'] = intval(explode(' ', microtime())[1] * 1E3) + intval(round(explode(' ', microtime())[0] * 1E3));
-            //calculate execution time
-            $this->metadata['timer']['execution_time'] = $this->metadata['timer']['ended_at_microtime'] - $this->metadata['timer']['started_at_microtime'];                        
-        }
-        
-
-        /* function is preparing metadata for displaying and registering its base structure */
-        private function constructMetadata($function) 
-        {
-            //construct base metadata structure
-            $this->metadata = [
-                'caller' => [
-                    'class' => $function
-                ],
-                'timer' => [],
-                'paramsyntax' => [],
-                'params' => [
-                    'accepted' => [],
-                    'unexpected' => [],
-                    'ignored' => 0
-                ],
-                'config' => [],
-                'connections' => [],
-                'modules' => []
-            ];          
-        }
-        
-        
-        private function getMetadata() {
-            $this->metadata['returned'] = $this->returned;
-            $this->metadata['lifetime_cycles'] = $this->lifetime_executions;
-            return $this->metadata;
-        }
-        
-        /* reading config from global config file */
-        private function readConfig() 
-        {
-            $this->metadata['config']['config_loaded'] = 0;
-            if (file_exists($this->configfile)) 
-            {
-                if ($config = file_get_contents($this->configfile)) 
-                {
-                    $config = json_decode($config, 1);
-                    if ($this->hasElements($config)) 
-                    {
-                        //assign config to private variable
-                        $this->config = $config;                            
-                        
-                        $this->metadata['config']['config_loaded'] = 1;
-                        $elements = '';
-                        foreach ($config as $k => $v) {
-                            if (is_array($v)) 
-                                $elements .= ' | ' . $k . '(array)';
-                            else
-                                $elements .= ' | ' . $k . '';
-                        }
-                        $this->metadata['config']['keys'] = trim($elements, ' |');
-                        unset($elements);
-                    }
-                    else
-                    {
-                        $this->config = [];
-                    }
-                }
-            }
+            $command = trim($command, '_');
+            if (empty($command)) return false;
             
-            if (empty($this->config['environment'])) return 'working environment not provided in config';
-            $this->metadata['caller']['environment'] = $this->config['environment'];
-        }
-        
-        /* reading headers from AWS Lambda Request*/
-        private function readHeaders($data) 
-        {
-            if ($this->hasContent(@$data['headers']['host'])) 
-            {
-                //environment variables
-                $hostparts = explode('.', $data['headers']['host']);
-                
-                if ($this->hasContent($hostparts[0])) {
-                    $this->task['domain_prefix'] = $hostparts[0];
-                }
-                if ($this->hasContent($hostparts[2])) {
-                    $this->task['region'] = $hostparts[2];
-                }                
-                if ($this->hasContent($data['headers']['host'])) {
-                    $this->task['function_url'] = $data['headers']['host'];
-                }
-                if ($this->hasContent($data['requestContext']['requestId'])) {
-                    $this->task['requestid'] = $data['requestContext']['requestId'];
-                }
-            }
+            $command = explode('_', $command);
             
-            //load AWS region
-            if ($this->hasContent($this->config['aws']['aws_region'])) {
-                $this->aws_region = $this->config['aws']['aws_region'];
-            } else {
-                //region failover
-                if ($this->hasContent($this->task['region'])) {
-                    $this->aws_region = $this->task['region'];
-                } else return ('aws_region not provided in config $this->config["aws"]["aws_region"]');
-            }
-        }
+            if (!is_array($command) && (count($command) != 2)) return false;
+            
+            if (empty($command[0]) or empty($command[1])) return false;
+            if (!preg_match("/^[a-z]+$/", $command[0])) return false;
+            if (!preg_match("/^[a-zA-Z]+$/", $command[1])) return false;
+            
+            $class_filename = sprintf('class_%s.php', $command[0]);
+            
+            if (!file_exists($includefile = $this->config['sourcedir'] . $class_filename))
+            if (!file_exists($includefile = $this->config['workdir'] . $class_filename))
+            if (!file_exists($includefile = $this->config['includedir'] . $class_filename)) { return 'Couldnt Include Matching File for Requested Class: ' . $includefile . print_r(scandir('/opt/includes/'), 1); }
+            
+            return [
+                'class' => $command[0],
+                'method' => '__' . $command[0] . '_' . $command[1],
+                'filename' => $class_filename,
+                'include' => $includefile
+            ];            
+        }        
         
-        private function readBody(&$data) 
-        {
-            //retrieve body and encode it depending if its POST or GET
-            if ($this->hasContent(@$data['requestContext']['http']['method'])) 
-            {
-                //accept only [POST | GET ] for now
-                $this->method = $data['requestContext']['http']['method'];
-                
-                //POST Method
-                if ($this->method == 'POST')
-                {
-                    if ($this->hasContent($data['body']))
-                    {
-                        //check if content is Base64 Encoded
-                        if ((bool)preg_match('/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $data['body'])) {
-                            $data['body'] = base64_decode($data['body']);
-                        }
-                                
-                        $data = json_decode($data['body'], 1);
-                    }                            
-                }
-                //GET Method
-                else if ($this->method == 'GET')
-                {
-                    if ($this->hasContent($data['rawQueryString'])) 
-                    {
-                        parse_str($data['rawQueryString'], $data);
-                    } else {
-                        $data = [];
-                    }
-                } else {
-                    //method is not POST | GET
-                    return sprintf('Method %s is not Allowed.', $this->method);
-                }                    
-            }           
-        }
+        //WE START WITH FUNCTION THAT ARE ACCESSIBLE VIA $this->execute() METHOD
         
         
-        public function performSystemParameterCheck(&$input, $rules) {
-            return $this->performParameterCheck($input, $rules, true);
-        }
-            
-            
-        private function performParameterCheck(&$data, $customparams = NULL, $dry_run = NULL)
-        {
-            if ($this->hasElements(@$customparams)) {
-                $paramsyntax = $customparams;
-            } else {
-                $paramsyntax = $this->metadata['paramsyntax'];
-            }
-            
-            if ($this->hasElements($data))
-            {
-                foreach ($data as $paramkey => $paramvalue) {
-                    if (
-                        //allowed parameters consist only a-z and 0-1 and -
-                        preg_match('/^[a-z0-9\-]+$/', $paramkey) 
-                        && 
-                        //leading minus or trailing minus
-                        strlen($paramkey[0]) == strlen(trim($paramkey[0], '-'))
-                        &&
-                        //not empty
-                        !empty(strlen($paramkey))
-                    )
-                    {
-                        //if parameter is accepted or unexpected
-                        if (isset($paramsyntax[$paramkey])) 
-                        {
-                            //param formatting and checks that dont halt the execution
-                            if (empty($dry_run))
-                                $this->metadata['params']['accepted'][$paramkey] = 1;
-                            
-                            $ps = $paramsyntax[$paramkey];
-                            
-                            //param formatting and checks that dont halt the execution
-                            $allowed = ['integer', 'boolean', 'string', 'array', 'enum'];
-                            if (!in_array($ps['type'], $allowed))
-                            {
-                                return sprintf('Required parameter syntax "type" not found for parameter "%s" or is not [ ' . implode(' | ', $allowed) . ' ]', $paramkey);
-                            }
-                            
-                            if ($ps['type'] == 'integer') 
-                            {
-                                $this->doIntegerParameterTypeTest($data[$paramkey], $paramkey, $ps);
-                            } 
-                            else if ($ps['type'] == 'boolean')
-                            {
-                                $this->doBooleanParameterTypeTest($data[$paramkey], $paramkey, $ps);
-                            }
-                            else if ($ps['type'] == 'string') 
-                            {
-                                $this->doStringParameterTypeTest($data[$paramkey], $paramkey, $ps);
-                            }
-                            else if ($ps['type'] == 'array') 
-                            {
-                                $this->doArrayParameterTypeTest($data[$paramkey], $paramkey, $ps);
-                            }
-                            else if ($ps['type'] == 'enum') 
-                            {
-                                $this->doEnumParameterTypeTest($data[$paramkey], $paramkey, $ps);
-                            }
-                            
-                            if (!empty($this->paramerror)) return $this->paramerror;
-                            
-                        } else {
-                            //move parameter to unexpected parameters list
-                            if (empty($dry_run)) 
-                                $this->metadata['params']['unexpected'][$paramkey] = 1;
-                            unset($data[$paramkey]);    
-                        }                       
-                    }
-                    else
-                    {
-                        /*
-                            move parameter to ignored counter
-                            happens if:
-                            - parameter uses characters that are not allowed in parameter
-                            - parameter key starts with - for example 
-                        */
-                        if (empty($dry_run)) 
-                            $this->metadata['params']['ignored']++;
-                        unset($data[$paramkey]);
-                    }
-                }
-            }
-            
-            //find parameters that doesnt exist in $data
-            if (is_array($paramsyntax))
-            {
-                foreach ($paramsyntax as $key => $prm) 
-                {
-                    if (isset($prm['default']) && !isset($data[$key])) {
-                        $data[$key] = $prm['default'];
-                    }
-                    
-                    if (isset($prm['required']) && !empty($prm['required'])) {
-                        if (!isset($data[$key])) {
-                            return sprintf('required parameter "%s" was not found', $key);
-                        }
-                    }
-                }
-            }
-            
-            return false;
-        }
-
         
-        //perform type test to enum.
+        
+        
+        
+        
         /*
-            required parameter syntax key is:
-                options => <array> of possible options that value must fall into
-                
-            allowed parameter syntax keys are:  
-                mustexist => <boolean> - value must be one of the followings
-                default => <string> - NB! fails in case set and not one of the options
+            function returns mysql object if asked from doExecute
+            $output = 'conn';
+            if ($err = $helper->doExecute(${$output}, [
+                'command' => 'getConnection',
+                'parameters' => [
+                    'connection' => 'core'
+                ]
+            ])) return $helper->err($err);
+            
+            return $helper->doOk(print_r($conn, 1));       
+            
         */
         
-        private function doEnumParameterTypeTest(&$input, $parameter, $ps = []) 
+        private function __getConnection($data) 
         {
-            $input = strtoupper($input);
+            $conn_slug = $data['connection'];
+            if (!is_string($conn_slug)) return $this->innererr('Connection slug is not set or not string');
             
-            if (!isset($ps['options']) || !is_array($ps['options'])) {
-                $this->paramerror = (sprintf('required parameter "%s" is expecting enum "options" but not found', $parameter));
-                return;
-            }
-            
-            if ($ps['default'])
-            {
-                $defaultfound = false;
-                foreach ($ps['options'] as $enumkey) {
-                    $enumkey = strtoupper($enumkey);
-                    if ($ps['default'] == $enumkey) $defaultfound = true;
-                }
-                if (!$defaultfound) {
-                    $this->paramerror = (sprintf('required parameter "%s" default enum [ %s ] is not one of the following [ %s ]', $parameter, $ps['default'], implode(' | ', $ps['options'])));
-                    return;                        
-                }
-            }
-            
-            $found = false;
-            foreach ($ps['options'] as $enumkey) {
-                $enumkey = strtoupper($enumkey);
-                if ($input == $enumkey) $found = true;
-            }
-            if (!$found)
-            {
-                if (!empty($ps['mustexist'])) {
-                    $this->paramerror = (sprintf('required parameter "%s" [ %s ] is not one of the following [ %s ]', $parameter, $input, implode(' | ', $ps['options'])));
-                    return;
-                }
+            if (empty($connpool = $this->metadata['connections']))
+                return $this->innererr(sprintf('Unable to Access Connection Pool: $helper->metadata["connections"]'));
                 
-                if (empty($ps['default'])) {
-                    $this->paramerror = (sprintf('required parameter "%s" has no default from enum options [ %s ]', $parameter, implode(' | ', $ps['options'])));
-                    return;
-                }                        
+            if (empty($connection = $connpool[$conn_slug]))
+                return $this->innererr(sprintf('Unable to Access Connection Pool Connection: $helper->metadata["connections"]["%s"]', $conn_slug));
                 
-                $input = $ps['default'];
-            }
-        }                
-        
-        //perform type test to array.
-        /*
-            allowed parameter syntax keys are:  
-                default => <json> - default array JSON in case of empty or not in case of array
-                min-count => <integer> - fail in case of less elements
-                require-keys => <string> - comma separated list of array keys that need to exist
-        */
-        
-        private function doArrayParameterTypeTest(&$input, $parameter, $ps = [])
-        {
-            if (!is_array($input) || empty($input)) {
-                if (isset($ps['default'])) {
-                    $input = json_decode($ps['default'], 1);
-                } else {
-                    if (isset($ps['required'])) {
-                        $this->paramerror = (sprintf('array $data[%s] is expected but not found', $parameter, $key));
-                        return;
-                    }
-                }
-                if (!is_array($input) || empty($input)) 
-                {
-                    if (isset($ps['required'])) 
-                    {
-                        $this->paramerror = (sprintf('array $data[%s] is expected but not found', $parameter, $key));
-                        return;
-                    }
-                    $input = [];
-                }
-            }
+            if (empty($connection['established']))
+                return $this->innererr(sprintf('Connection Pool Connection is not Established: $helper->metadata["connections"]["%s"]', $conn_slug));
             
-            if (isset($ps['min-count']) && (count($input) < $ps['min-count'])) {
-                $this->paramerror = (sprintf('required parameter "%s" is expecting %d elements but %d found', $parameter, $ps['min-count'], count($input)));
-                return;
-            }
-            
-            if (!is_array($input)) {
-                $this->paramerror = (sprintf('required parameter "%s" is expecting to be array type but its not. Use valid "default" JSON', $parameter));
-                return;
-            }
-            
-            if (!empty($ps['require-keys'])) {
-                $requiredkeys = explode(',', $ps['require-keys']);
-                foreach ($requiredkeys as $key) {
-                    $key = trim($key);
-                    if (!isset($input[$key])) {
-                        $this->paramerror = (sprintf('array key $%s[%s] was expected but not found', $parameter, $key));
-                        return;
-                    }
-                }
-            }
-
+            if (!is_object($connection['object']))
+                return $this->innererr(sprintf('Connection is Promesed to be Established but No SQL Object: $helper->metadata["connections"]["%s"]', $conn_slug));
+                
+            return $connection['object'];
         }
         
-        //perform type test to boolean.
-        /*
-            allowed parameter syntax keys are:
-                fail-if-empty => <1> to fail on '' inputs
-                default => boolean to replace in case of ''
-                fail-if-false => <boolean> to fail if parameter is set false
-                fail-if-true => <boolean> to fail if parameter is set true
-        */
-        
-        private function doBooleanParameterTypeTest(&$input, $parameter, $ps = [])
-        {
-            if ($input == '' && $ps['empty-is-error'] == 1) {
-                $this->paramerror = (sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
-            }
-            
-            if ($input == '' && isset($ps['default'])) {
-                $input = sprintf('%b', $ps['default']);
-            }
-            
-            if ((!$input) && isset($ps['fail-if-false'])) {
-                $this->paramerror = (sprintf('required parameter "%s" is false and "fail-if-false" flag is set', $parameter));
-            }
-            
-            if (($input) && isset($ps['fail-if-true'])) {
-                $this->paramerror = (sprintf('required parameter "%s" is true and "fail-if-true" flag is set', $parameter));
-            }   
-            
-            $input = sprintf('%b', $input);
-        }
-        
-        //perform type test to integer.
-        /*
-            allowed parameter syntax keys are:
-                fail-if-empty => <1> to fail on '' inputs
-                default => int to replace in case of 0
-                min-value => int to perform minimum value test
-                max-value => int to perform maximum value test
-                required => <1> to return error in case integer = 0
-        */                
-        private function doIntegerParameterTypeTest(&$input, $parameter, $ps = []) {
-            //return error if empty
-            if ($input == '' && $ps['fail-if-empty']) {
-                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
-            }
-            
-            $input = sprintf('%d', $input);
-            
-            //if input = 0 we replace it with default
-            if ($input == 0 && $ps['default']) {
-                $input = sprintf('%d', $ps['default']);
-            }
-            
-            //in case of value less than minimum value we set to minimum value
-            if (isset($ps['min-value']) && $ps['min-value'] != '' && $input < $ps['min-value']) {
-                $input = $ps['min-value'];
-            }
-            
-            //in case of value bigger than maximum value we set to maximum value
-            if (isset($ps['max-value']) && $ps['max-value'] != '' && $input > $ps['max-value']) {
-                $input = $ps['max-value'];
-            }
-            
-            //in case of zero we return error
-            if ($input == 0 && $ps['required']) {
-                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
-            }                   
-            
-        }
-
-        //perform type test to string.
-        /*
-            allowed parameter syntax keys are:
-                skip-trim => <1> to avoid trimming
-                strip-not-matched => <pattern> to strip all chararacters not in range
-                htmlentities => <1> to convert special characters to html entities
-                addslashes => <1> to perform addslashes() php function
-                length => <int> to require input length
-                default => <string> to replace input in case of empty parameter
-                required => <1> to return error in case of empty string
-        */
-        private function doStringParameterTypeTest(&$input, $parameter, $ps = []) 
-        {
-            //in case of skip-trim flag we dont strip the input string
-            //strip is by-default behaviour
-            if (empty($ps['skip-trim'])) 
-            {
-                $input = trim($input);
-            }
-            
-            //strip-not-matched preg_match returns only characters in given range
-            if (!empty($ps['strip-not-matched']))
-            {
-                $input_remainer = '';
-                $pattern = $ps['strip-not-matched'];
-                for ($index = 0; $index < strlen($input); $index++) {
-                    $char = $input[$index];
-                    if (preg_match('/^' . $pattern . '+$/', $char))
-                        $input_remainer .= $char;
-                }
-                $input = $input_remainer;
-            }
-
-            //require string length
-            if (!empty($ps['length'])) {
-                if (strlen($input) != $ps['length'])
-                    $this->paramerror = (sprintf('required parameter "%s" is not length of %d but %d instead', $parameter, $ps['length'], strlen($input)));
-            }
-            
-            //convert special chars to htmlentities
-            if (!empty($ps['htmlentities'])) {
-                $input = htmlentities($input);
-            }
-            
-            //add slashes if required
-            if (!empty($ps['addslashes'])) {
-                $input = addslashes($input);
-            }
-            
-            //set default if empty
-            if ($input == '' && $ps['default']) {
-                $input = $ps['default'];
-            }
-            
-            //return error if empty
-            if ($input == '' && $ps['required']) {
-                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
-            }
-        }       
-
-        function paramDecrypt($data) {
-            if (!isset($data)) return 1;
-            
-            if (is_array($data)) {
-                if (count($data)) {
-                    if (isset($data['is_crypted'])) {
-                        if (isset($data['value'])) {
-                            return $this->strDecrypt($data['value']);
-                        }
-                    }
-                }
-            }
-            return $data;
-        }
-        
-        
-
         
         /* encrypting string with key and salt */
-        private function __doStringEncrypt($data) 
+        private function __doStringDecrypt($data) 
         {
             if (empty($data['input'])) {
-                return ('noting to encrypt');
+                return $helper->innererr('noting to decrypt');
             }
             
             if (empty($this->salt)) {
-                return ('encryption SALT is not defined');
+                return $this->innererr('decryption SALT is not defined');
             }
             
             if (empty($this->config['encryption_key'])) {
-                return ('encryption key in config file is not set');
+                return $this->innererr('decryption key in config file is not set');
             }
             
             $encrypt_method = "AES-256-CBC";
@@ -768,41 +311,214 @@
             
             // iv - encrypt method AES-256-CBC expects 16 bytes - else you will get a warning
             $iv = substr(hash('sha256', $this->salt), 0, 16);
+            $output = openssl_decrypt(base64_decode($data['input']), $encrypt_method, $key, 0, $iv);
             
-            $output = openssl_encrypt($data['input'], $encrypt_method, $key, 0, $iv);
-            $output = base64_encode($output);
-            
-            return $this->ok($output);
+            return $this->innerok($output);
         }        
         
-        private function strDecrypt($data) {
-            $output = 'result';
-            if ($err = $this->execute(${$output}, ['command' => 'doStringDecrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = ($err); return; }
-            return $result;
+        /* function is creating AWS Lambda Client for the user */
+        private function __getAWSLambdaClient() 
+        {
+            $lambdaclient = new \Aws\Lambda\LambdaClient([
+                'region' => $this->getConfig('aws->aws_region'),
+                'version' => '2015-03-31',
+                'credentials' => [
+                    'key' => $this->getConfig('aws->aws_key'),
+                    'secret' => $this->getConfig('aws->aws_secret')
+                ]
+            ]);
+            return $lambdaclient;
         }
         
-        
-        private function strEncrypt($data) {
-            $output = 'result';
-            if ($err = $this->execute(${$output}, ['command' => 'doStringEncrypt', 'parameters' => ['input' => $data]])) { $this->paramerror = ($err); return; }
-            return $result;
-        }
-        
+        /*
+            function is calling AWS API Request based by endpoint path (/aws/layers/refresh)
 
-        function getConfig($path) {
-            if (empty($path)) return '';
-            $paths = explode('->', $path);
+            sample usage:
             
-            $itens = $this->config;
-            foreach($paths as $ndx) {
-                if (isset($itens[$ndx])) $itens = $itens[$ndx];
+                if ($err = $helper->doExecute(${$output = 'response'}, [
+                    'command' => 'doAWSAPIRequest',
+                    'parameters' => [
+                        'region' => $aws_region,
+                        'endpoint' => '/aws/lambda/layer/versions/pull/list',
+                        'connection' => $conn,
+                    ]
+                ])) return $helper->err($err);                 
+        */
+        private function __doAWSAPIRequest($data) 
+        {
+            //we replace this later
+            if (empty($data[$tf = 'endpoint'])) {
+                return $this->err(sprintf('required parameter is missing: [ %s ]', $tf));   
             }
-            return $this->paramDecrypt($itens);
-        }            
+            if (empty($data[$tf = 'region'])) {
+                return $this->err(sprintf('required parameter is missing: [ %s ]', $tf));   
+            }                
+            if (!$data[$tf = 'connection']) return $this->err('required parameter missing: [' . $tf . ']');
+            
+            //get url for the function
+            if ($err = $this->execute(${$output = 'function_url'}, [
+                'command' => 'mysql_getSingleCellValue',
+                'parameters' => [
+                    'tablename' => '_aws_' . $data['region'] . '_functions',
+                    'where' => [
+                        'description' => $data['endpoint'],
+                        'region' => $data['region']
+                    ],
+                    'column' => 'function_url',
+                    'singleexpected' => 1,
+                    'connection' => 'core'
+                ]
+            ])) { 
+                if ($err == 'NULL') return $this->err(sprintf('Unable to retrieve Amazon URL for Function %s', $data['endpoint']));
+                else return $this->err($err); 
+            }
+            
+            if (!$function_url || $err) {
+                return $this->err(sprintf('Error 404: API endpoint %s not found', $data['endpoint']));
+            }
 
-        private function getSalt() {
-            return $this->salt;
+            $ch = curl_init();
+            
+            curl_setopt_array($ch, [
+              CURLOPT_URL => $function_url, 
+              CURLOPT_RETURNTRANSFER => 1,
+              CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+              CURLOPT_CUSTOMREQUEST => 'POST',
+              CURLOPT_POSTFIELDS => json_encode($data['payload']),
+              CURLOPT_HTTPHEADER => ['Content-Type: application/json']
+            ]);                
+            
+            $result = curl_exec($ch);
+            if (curl_exec($ch) === false) {
+                return $this->err(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
+            }                
+            
+            curl_close($ch);
+            $result = json_decode($result, 1);
+            
+            if ($result['status'] == 'error') {
+                $message = "
+                Caller Function: %s
+                Message: %s
+                
+                URL Called: %s
+                EndPoint Called: %s
+                
+                Payload: %s";
+                
+                return $this->err(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
+            }
+            else
+            if ($result['status'] == 'success')
+            {
+                if (isset($result['data']['result']))
+                    return $this->ok($result['data']['result']);
+                else if (isset($result['data']['records']))
+                    return $this->ok($result['data']['records']);
+                else return $this->ok($result['data']);
+            }
+            
+            return $this->err(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
         }
-    }
 
-?>
+        /*
+            function is establishing required connection based on the connection slug and storing it to
+            $this->metadata['connection'][<connection_slug>]['object']
+
+            for connection to be created you need following config:
+
+            'connections' => [
+                <connection_slug> => [
+                    'hostname' => <hostname>,
+                    'username' => <username>,
+                    'password' => <password>,
+                    'database' => <database>
+                ]
+            ]
+
+            connection can be retrieved:
+
+            $this->helper();
+        */
+        private function __doEstablishSQLConnection($data) 
+        {
+            if (!$data['connection']) {
+                return $this->innererr('no connection parameter defined');
+            }
+            
+            if (!is_string($data['connection'])) {
+                return $this->innererr('connection parameter is not defined as string');
+            }            
+            
+            if (isset($this->metadata['connections'][$data['connection']]['object'])) {
+                return $this->innerok(sprintf('connection was already established and can be found @ $helper->conn[%s]', $data['connection']));
+            }                
+            
+            if (!$this->config['connections'][$data['connection']]) {
+                return $this->innererr(sprintf('config doesnt provide $config[connections][%s]', $data['connection']));
+            }
+            
+            if (empty($this->config['connections'][$data['connection']]['hostname'])) {
+                return $this->innererr(sprintf('config doesnt provide $config[connections][%s][hostname]', $data['connection']));
+            }
+            
+            if (empty($this->config['connections'][$data['connection']]['username'])) {
+                return $this->innererr(sprintf('config doesnt provide $config[connections][%s][username]', $data['connection']));
+            }
+            
+            if (empty($this->config['connections'][$data['connection']]['password'])) {
+                return $this->innererr(sprintf('config doesnt provide $config[connections][%s][username]', $data['password']));
+            }
+            
+            $cs = [
+                'hostname' => $this->paramDecrypt($this->config['connections'][$data['connection']]['hostname']),
+                'username' => $this->paramDecrypt($this->config['connections'][$data['connection']]['username']),
+                'password' => $this->paramDecrypt($this->config['connections'][$data['connection']]['password']),
+                'database' => $this->paramDecrypt($this->config['connections'][$data['connection']]['database'])
+            ];
+            
+            mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_INDEX);
+            
+            if (!$conn = mysqli_connect(
+                $cs['hostname'], 
+                $cs['username'], 
+                $cs['password'], 
+                $cs['database']
+            )) {
+                return $this->innererr(sprintf('unable to open MySQL connection [%s] %s', $data['connection'], print_r($cs, 1)));
+            }
+            
+            if (!is_object($conn)) {
+                return $this->innererr('$conn from establisConnection is not mysql class');
+            }
+            
+            $this->metadata['connections'][$data['connection']] = [
+                'established' => true,
+                'object' => $conn
+            ];
+            
+            $this->conn[$data['connection']] = $conn;
+            
+            return $this->innerok(sprintf('connection established and can be found @ $helper->conn[%s]', $data['connection']));
+        }
+        
+        
+        //lambda4humans specific commands
+        private function __getFunctionDataByFunctionName($data) 
+        {
+            if (!is_object($data['connection'])) return $this->innererr('Required MySQL connection __getFunctionDataByFunctionName() for is not established: ' . print_r($data));
+            $conn = $data['connection'];
+            
+            if (!$res = $conn->query(sprintf("SELECT * FROM `_aws_" . $this->aws_region . "_functions` WHERE function_name = '%s'", $data['function-name']))) {
+                return $this->innererr($conn->error);
+            }
+
+            if (!mysqli_num_rows($res)) return $this->innererr(sprintf('Requested Function Not Found: %s', $data['function-name']));
+            $row = mysqli_fetch_assoc($res);
+            
+            return $this->innerok($row);
+            
+            
+        }
+        
+    }   
