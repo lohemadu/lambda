@@ -5,32 +5,38 @@
         //declare protected inheritable variables
         private $returned = 0;
         private $configfile = '/opt/config/configuration.json';
+        private $config_dir;
+        private $function_parameters_dir;
+        private $system_parameters_dir;        
 
         protected $config = [];
         
         //public variables
-        public $error_bad_request = 400;
-        public $success_status = 200;
         public $task = [];
         public $aws_region;
         public $metadata = [];
         public $version = '1.1.0';
-        
-        
+    
         //will be launched when we start a new server infinite loop
-        function initialization($function) 
+        public function initialization($function) 
         {
-            
+            $this->config_dir = '/opt/config/';
+            $this->function_parameters_dir = $this->config_dir . 'params/';
+            $this->system_parameters_dir = $this->function_parameters_dir . 'system/';
+        
             //constructing basic class metadata
             $this->constructMetadata($function);            
 
             //read in global configuration
-            $this->readConfig();            
+            $this->readConfig(); 
             
-            //anything we return here will be displayed as an error
-            //return "unable to load config"
+            $this->metadata['paramsyntax'] = $this->loadFunctionParameters($function);
+            
+            //anything we return here will be displayed as an error in bootstrap
+            //for example: return "error occured"
         }
         
+        //PUBLIC SCOPE METHOD DECLARATIONS    
         
         //will be started prior every run
         public function prepare(&$data, $customparams = NULL) 
@@ -47,18 +53,28 @@
             //clean and validate parameters
             return $this->performParameterCheck($data, $customparams ?: NULL);
             
-            //anything we return here will be displayed as an error
-            //return "error occured"
+            //anything we return here will be displayed as an error in bootstrap
+            //for example: return "error occured"
         }        
         
         
-        function resultreturned() {
+        //if user has ever requested function $this->ok or $this->err in function
+        public function resultreturned() {
             return $this->returned;
         }
         
+        /* by entering input parameters we return if element is array and can be forlooped */
+        public function hasElements($variable = NULL) {
+            return (isset($variable) && is_array($variable) && count($variable));
+        }
+        
+        //making sure the variable has a length and its defined
+        public function hasContent($variable = NULL) {
+            return (isset($variable) && !empty($variable));
+        }
 
-        //PUBLIC SCOPE METHOD DECLARATIONS
-        function err($data = NULL)
+        //generating general public error message json with payload
+        public function err($data = NULL)
         {
             if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
             $this->timerstop();
@@ -99,6 +115,7 @@
             return $result; 
         }
 
+        //generating general public success message json with payload
         public function ok($data = NULL)
         {
             if (debug_backtrace()[1]['function'] == 'run') $this->returned++;
@@ -149,7 +166,24 @@
         }   
         
         
-
+        //PRIVATE FUNCTION DECLARATIONS
+        /* we load default paramsyntax for the requester function */
+        private function loadFunctionParameters($function_name) 
+        {
+            if (file_exists($syntaxfile = $this->function_parameters_dir . $function_name . '.json')) {
+                $json = file_get_contents($syntaxfile);
+                try {
+                    $paramsyntax = json_decode($json, 1);
+                } catch (Exception $e) {
+                    $paramsyntax = [];
+                }
+            } else $paramsyntax = [];
+            
+            $this->metadata['paramsyntax'] = $paramsyntax;
+        }
+        
+        //stopping the execution timer to calculate total execution time.
+        //lambda lag will be added to your lambda billing
         private function timerstop()
         {
             if (empty($this->metadata['timer']['started_at_microtime'])) return;
@@ -160,17 +194,7 @@
             //calculate execution time
             $this->metadata['timer']['execution_time'] = $this->metadata['timer']['ended_at_microtime'] - $this->metadata['timer']['started_at_microtime'];                        
         }
-
-        /* by entering input parameters we return if element is array and can be forlooped */
-        public function hasElements($variable = NULL) {
-            return (isset($variable) && is_array($variable) && count($variable));
-        }
         
-        public function hasContent($variable = NULL) {
-            return (isset($variable) && !empty($variable));
-        }
-        
-        //INHERITABLE SCOPE METHOD DECLARATIONS
 
         /* function is preparing metadata for displaying and registering its base structure */
         private function constructMetadata($function) 
