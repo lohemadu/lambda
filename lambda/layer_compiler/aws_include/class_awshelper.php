@@ -6,6 +6,9 @@
     define('__MYSQL_GET_CONNECTION__', 'getConnection');
     define('__MYSQL_GET_QUERYSET__', 'mysql_doQuery');
     define('__MYSQL_GET_COUNT__', 'mysql_getCount');
+    
+    define('__MYSQL_INSERT_OR_UPDATE_ROW__', 'mysql_doInsertOrUpdate');
+    define('__MYSQL_SOFT_DELETE__', 'mysql_doSoftDelete');
 
     class awshelper extends corebase
     {   
@@ -124,6 +127,11 @@
             }
             catch(Exception $e) { return $e->getMessage(); }
             catch(Throwable $t) { return $t->getMessage(); }
+            
+            if (is_object($result)) {
+                $successresult = $result;
+                return false;
+            }
             
             //detect what kind of result was sent            
             if (isset($result['inner'])) {
@@ -317,10 +325,10 @@
         }        
         
         /* function is creating AWS Lambda Client for the user */
-        private function __getAWSLambdaClient() 
+        private function __getAWSLambdaClient($data) 
         {
             $lambdaclient = new \Aws\Lambda\LambdaClient([
-                'region' => $this->getConfig('aws->aws_region'),
+                'region' => $data['region'],
                 'version' => '2015-03-31',
                 'credentials' => [
                     'key' => $this->getConfig('aws->aws_key'),
@@ -521,4 +529,6 @@
             
         }
         
-    }   
+    }
+
+?>
