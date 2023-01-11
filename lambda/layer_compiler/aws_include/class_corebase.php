@@ -788,8 +788,24 @@
             return $result;
         }
         
+        
+        public function parseJSONfromFile($file)
+        {
+            if (!file_exists($file)) return [];
+            $json = file_get_contents($file);
+            if ($json == '') return [];
 
-        function getConfig($path) {
+            try {
+                $jsonarr = json_decode($json, $associative=true, $depth=512, JSON_THROW_ON_ERROR);
+            } catch (Exception $e) {
+                return [];
+            }
+            if (isset($jsonarr) && is_array($jsonarr)) return $jsonarr;
+            return [];
+        }
+        
+
+        public function getConfig($path) {
             if (empty($path)) return '';
             $paths = explode('->', $path);
             

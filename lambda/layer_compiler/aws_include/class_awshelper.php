@@ -1,13 +1,24 @@
 <?php
 
-    define('__L4H_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
+    define('__TYPE_INITIALIZATION__', 'INITIALIZATION');
+    define('__TYPE_AWS_FUNCTION__', 'AWS_FUNCTION');
 
+    define('__L4H_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
+    define('__MYSQL_GET_SINGLE_RECORD__', 'mysql_doQuerySingleRecord');
+    define('__MYSQL_GET_SINGLE_RECORD_CELL__', 'mysql_getSingleCellValue');
+    define('__MYSQL_GET_MULTISET_RECORD__', 'mysql_doQueryMultisetRecord');
+    
     define('__MYSQL_ESTABLISH_CONNECTION__', 'doEstablishSQLConnection');
     define('__MYSQL_GET_CONNECTION__', 'getConnection');
     define('__MYSQL_GET_QUERYSET__', 'mysql_doQuery');
     define('__MYSQL_GET_COUNT__', 'mysql_getCount');
     
-    define('__MYSQL_INSERT_OR_UPDATE_ROW__', 'mysql_doInsertOrUpdate');
+    
+    
+    define('__MYSQL_RUN_INSERT_OR_UPDATE_ROW__', 'mysql_doInsertOrUpdate');
+    define('__MYSQL_RUN_INSERT_QUERY__', '__mysql_doInsertQuery');
+    define('__MYSQL_RUN_SILENT_QUERY__', '__mysql_doVoidQuery');
+    
     define('__MYSQL_SOFT_DELETE__', 'mysql_doSoftDelete');
 
     class awshelper extends corebase
@@ -37,7 +48,7 @@
                     'connection' => 'core',
                     'query' => $query
                 ]
-            ])) return $this->error($err);            
+            ])) return $this->innererror($err);            
         */  
 
         function execute(&$successresult, $data) 
@@ -355,34 +366,36 @@
         private function __doAWSAPIRequest($data) 
         {
             //we replace this later
-            if (empty($data[$tf = 'endpoint'])) {
-                return $this->err(sprintf('required parameter is missing: [ %s ]', $tf));   
-            }
-            if (empty($data[$tf = 'region'])) {
-                return $this->err(sprintf('required parameter is missing: [ %s ]', $tf));   
-            }                
-            if (!$data[$tf = 'connection']) return $this->err('required parameter missing: [' . $tf . ']');
-            
-            //get url for the function
-            if ($err = $this->execute(${$output = 'function_url'}, [
-                'command' => 'mysql_getSingleCellValue',
-                'parameters' => [
-                    'tablename' => '_aws_' . $data['region'] . '_functions',
-                    'where' => [
-                        'description' => $data['endpoint'],
-                        'region' => $data['region']
-                    ],
-                    'column' => 'function_url',
-                    'singleexpected' => 1,
-                    'connection' => 'core'
-                ]
-            ])) { 
-                if ($err == 'NULL') return $this->err(sprintf('Unable to retrieve Amazon URL for Function %s', $data['endpoint']));
-                else return $this->err($err); 
+            if (empty($data['lambda-function-name']) && empty($data['lambda-function-url'])) {
+                return $this->innererr('one of the parameters is missing: [ lambda-function-name | lambda-function-url  ]');
             }
             
-            if (!$function_url || $err) {
-                return $this->err(sprintf('Error 404: API endpoint %s not found', $data['endpoint']));
+            if (empty($data['lambda-function-url'])) 
+            {
+                //lambda-function-name path was sent in
+                if ($err = $this->execute(${$output = 'function_url'}, [
+                    'command' => 'mysql_getSingleCellValue',
+                    'parameters' => [
+                        'tablename' => '_aws_' . $data['region'] . '_functions',
+                        'where' => [
+                            'function_name' => $data['lambda-function-name'],
+                            'region' => $data['region']
+                        ],
+                        'column' => 'function_url',
+                        'singleexpected' => 1,
+                        'connection' => 'core'
+                    ]
+                ])) { 
+                    if ($err == 'NULL') return $this->innererr(sprintf('Unable to retrieve Amazon URL for Function %s', $data['lambda-function-name']));
+                    else return $this->innererr($err); 
+                }
+                
+                if (!$function_url || $err) {
+                    return $this->innererr(sprintf('Error 404: API lambda-function-name %s not found', $data['lambda-function-name']));
+                }                
+            } else {
+                //lambda-function-url was sent in
+                $function_url = $data['lambda-function-url'];
             }
 
             $ch = curl_init();
@@ -398,7 +411,7 @@
             
             $result = curl_exec($ch);
             if (curl_exec($ch) === false) {
-                return $this->err(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
+                return $this->innererr(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
             }                
             
             curl_close($ch);
@@ -414,19 +427,19 @@
                 
                 Payload: %s";
                 
-                return $this->err(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
+                return $this->innererr(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
             }
             else
             if ($result['status'] == 'success')
             {
                 if (isset($result['data']['result']))
-                    return $this->ok($result['data']['result']);
+                    return $this->innerok($result['data']['result']);
                 else if (isset($result['data']['records']))
-                    return $this->ok($result['data']['records']);
-                else return $this->ok($result['data']);
+                    return $this->innerok($result['data']['records']);
+                else return $this->innerok($result['data']);
             }
             
-            return $this->err(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
+            return $this->innererr(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
         }
 
         /*

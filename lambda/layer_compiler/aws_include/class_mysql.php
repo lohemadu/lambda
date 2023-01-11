@@ -6,27 +6,6 @@
         class mysql extends corebase
         {
             
-            //for sending internal success message from $this->executer()
-            private function innerok($res) 
-            {
-                return [
-                    'inner' => 1,
-                    'success' => 1,
-                    'message' => $res
-                ];
-            }
-            
-            //for sending internal error message from $this->executer()
-            private function innererr($res) 
-            {
-                return [
-                    'inner' => 1,
-                    'error' => 1,
-                    'message' => $res
-                ];
-            }                     
-            
-
             public function __mysql_doQuery($data) 
             {
                 $conn = $data['connection'];
@@ -62,6 +41,23 @@
                 return $this->innerok($result);
             }
 
+
+            public function __mysql_doInsertQuery($data)
+            {
+                $conn = $data['connection'];
+                if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
+                
+                $query = $this->doConstructInsert($data);
+                if ($data['return-query'])
+                    return $this->innerok($query);
+                
+                $msg = $this->__mysql_doVoidQuery([
+                    'connection' => $conn,
+                    'query' => $query['message']
+                ]);
+                if ($msg['success']) return $this->innerok($msg['message']);
+                return $this->innererr($msg['message']);
+            }
 
             public function __mysql_doVoidQuery($data) 
             {
@@ -111,13 +107,11 @@
                 $querypool[] = sprintf("SET @ALTER_SQL = CONCAT('ALTER TABLE `%s` AUTO_INCREMENT =', @NEW_AI);", $data['tablename']);
                 $querypool[] = sprintf("PREPARE NEWSQL FROM @ALTER_SQL; EXECUTE NEWSQL;");
                 
-                //insert query
-                
                 //insert
-                $e = $this->doConstructInsert($data);
-                if (isset($e['inner']['error'])) {
-                    return $this->innererr($e['message']);
-                } else $insert = $e['message'];
+                $insert = $this->doConstructInsert($data);
+                if (isset($insert['inner']['error'])) {
+                    return $this->innererr($insert['message']);
+                } else $insert = $inset['message'];
 
                 //update
                 $e = $this->doConstructUpdate($data);
@@ -149,7 +143,7 @@
             }  
 
 
-            function __mysql_doSoftDelete($data)
+            public function __mysql_doSoftDelete($data)
             {
                 $conn = $data['connection'];
                 if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
@@ -196,7 +190,7 @@
             } 
 
 
-            function __mysql_getSingleCellValue($data)
+            public function __mysql_getSingleCellValue($data)
             {
                 $conn = $data['connection'];
                 if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
@@ -222,7 +216,7 @@
                 }
                 
                 if (empty(mysqli_num_rows($res))) {
-                    return $this->innererr('no records retrieved from $mysql->__mysql_getSingleCellValue():');
+                    return $this->innererr('no records retrieved from $mysql->__mysql_getSingleCellValue(): ' . $query);
                 }
                 
                 if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
@@ -242,7 +236,76 @@
                 
                 return $this->innerok($value);               
             }
-
+            
+            
+            
+            /* returns single row from table identified by key */
+            public function __mysql_doQuerySingleRecord($data)
+            {
+                $conn = $data['connection'];
+                if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
+                
+                if (!$whereconditions = $this->doConstructWhere($conn, $data['where'])) {
+                    return $this->innererr('We were unable to construct WHERE Query');
+                }
+                
+                $where = implode(' AND ', $whereconditions);
+                if (!empty($where)) $where = ' WHERE ' . $where;
+                
+                $query = sprintf('SELECT * FROM `%s`%s', $data['tablename'], $where);
+                if (!$res = $conn->query($query)) {
+                    return $this->innererr($conn->error);
+                }
+                
+                if (mysqli_num_rows($res) > 1) {
+                    return $this->innererr($query . ' returned more than 1 row. Please rafinate your query so it is single row recordset.');
+                }
+                
+                $row = mysqli_fetch_assoc($res);
+                return $this->innerok($row);
+            }
+            
+            //constructing where based on the where fieldset
+            private function doConstructWhere($conn, $pieces, $negative = false)
+            {
+                foreach ($pieces as $wherekey => $value) 
+                {
+                    if (is_object($value))
+                        continue;
+                    else
+                    if (!is_array($value)) 
+                    {
+                        $value = $this->real_escape_string($value);
+                        if (!$negative)
+                            $wherequery[] = sprintf('`%s` = \'%s\'', $wherekey, $value);
+                        else
+                            $wherequery[] = sprintf('`%s` <> \'%s\'', $wherekey, $value);                        
+                    }
+                    else 
+                    {
+                        $where = '`%s` %s (%s)';
+                        foreach ($value as $unsafe_key => $unsafe_value) {
+                            $value[$unsafe_key] = $this->real_escape_string($unsafe_value);
+                        }
+                        $imploded = implode('\',\'', $value);
+                        if ($negative) $condition = 'NOT IN'; else $condition = 'IN';
+                        $wherequery[] = sprintf($where, $wherekey, $condition, $imploded);
+                    }
+                }
+                return $wherequery;
+            }
+            
+            
+            private function real_escape_string($input)
+            {
+                if(is_array($input))
+                    return array_map(__METHOD__, $input);
+            
+                if(!empty($input) && is_string($input)) {
+                    return str_replace(array('\\', "\0", "\n", "\r", "'", '"', "\x1a"), array('\\\\', '\\0', '\\n', '\\r', "\\'", '\\"', '\\Z'), $input);
+                }
+                return $input;
+            }
 
             //building insert query based on data
             private function doConstructInsert($data)
@@ -290,7 +353,27 @@
                 $query = str_replace('!!!\'', '', str_replace('\'!!!', '', $query));
 
                 return $this->innerok($query);               
-            }            
+            }          
+            
+            //for sending internal success message from $this->executer()
+            private function innerok($res) 
+            {
+                return [
+                    'inner' => 1,
+                    'success' => 1,
+                    'message' => $res
+                ];
+            }
+            
+            //for sending internal error message from $this->executer()
+            private function innererr($res) 
+            {
+                return [
+                    'inner' => 1,
+                    'error' => 1,
+                    'message' => $res
+                ];
+            }              
 
 
 
