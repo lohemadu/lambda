@@ -1,25 +1,28 @@
 <?php
 
+    //type definitions for parser
     define('__TYPE_INITIALIZATION__', 'INITIALIZATION');
     define('__TYPE_AWS_FUNCTION__', 'AWS_FUNCTION');
 
-    define('__L4H_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
-    define('__MYSQL_GET_SINGLE_RECORD__', 'mysql_doQuerySingleRecord');
-    define('__MYSQL_GET_SINGLE_RECORD_CELL__', 'mysql_getSingleCellValue');
-    define('__MYSQL_GET_MULTISET_RECORD__', 'mysql_doQueryMultisetRecord');
+    define('__AWS_API_REQUEST__', 'doAWSAPIRequest');
+    define('__AWS_API_GET_LAMBDACLIENT__', 'getAWSLambdaClient');
+    define('__AWS_API_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
     
     define('__MYSQL_ESTABLISH_CONNECTION__', 'doEstablishSQLConnection');
-    define('__MYSQL_GET_CONNECTION__', 'getConnection');
-    define('__MYSQL_GET_QUERYSET__', 'mysql_doQuery');
-    define('__MYSQL_GET_COUNT__', 'mysql_getCount');
+    define('__MYSQL_GET_CONNECTION_OBJECT__', 'getConnection');
     
+    define('__MYSQL_FETCH_FIRST_ROW__', 'mysql_doQuerySingleRecord');
+    define('__MYSQL_FETCH_FIRST_ROW_CELL__', 'mysql_getSingleCellValue');
+    define('__MYSQL_FETCH_ALL_ROWS__', 'mysql_doQueryMultisetRecord');
     
-    
+    define('__MYSQL_RUN_QUERY__', 'mysql_doQuery');
+    define('__MYSQL_RUN_GET_COUNT__', 'mysql_getCount');
     define('__MYSQL_RUN_INSERT_OR_UPDATE_ROW__', 'mysql_doInsertOrUpdate');
-    define('__MYSQL_RUN_INSERT_QUERY__', '__mysql_doInsertQuery');
-    define('__MYSQL_RUN_SILENT_QUERY__', '__mysql_doVoidQuery');
+    define('__MYSQL_RUN_INSERT_QUERY__', 'mysql_doInsertQuery');
+    define('__MYSQL_RUN_SILENT_QUERY__', 'mysql_doVoidQuery');
+    define('__MYSQL_RUN_SOFT_DELETE__', 'mysql_doSoftDelete');
     
-    define('__MYSQL_SOFT_DELETE__', 'mysql_doSoftDelete');
+    define('__DECRYPT_STRING__', 'doStringDecrypt');
 
     class awshelper extends corebase
     {   
