@@ -65,10 +65,9 @@
             }
             
             //clean and validate parameters
-            if (!$response = $this->performParameterCheck($data, is_null($customparams) ? NULL : $customparams)) {
+            if ($response = $this->performParameterCheck($data, is_null($customparams) ? NULL : $customparams)) {
                 return $response;
             }
-
             //anything we return here will be displayed as an error in bootstrap
             //for example: return "error occured"
         }        
