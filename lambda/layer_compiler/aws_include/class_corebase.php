@@ -65,8 +65,9 @@
             }
             
             //clean and validate parameters
+            $response = NULL;
             if ($response = $this->performParameterCheck($data, is_null($customparams) ? NULL : $customparams)) {
-                return $response;
+                return $response . ' on payload: ' . json_encode($data);
             }
             //anything we return here will be displayed as an error in bootstrap
             //for example: return "error occured"
@@ -392,6 +393,8 @@
             
         private function performParameterCheck(&$data, $customparams = NULL, $dry_run = NULL)
         {
+            $prm = [];
+            $this->paramerror = '';
             if ($this->hasElements(@$customparams)) {
                 $paramsyntax = $customparams;
             } else {
@@ -416,8 +419,9 @@
                         if (isset($paramsyntax[$paramkey])) 
                         {
                             //param formatting and checks that dont halt the execution
-                            if (empty($dry_run))
+                            if (empty($dry_run)) {
                                 $this->metadata['params']['accepted'][$paramkey] = 1;
+                            }
                             
                             $ps = $paramsyntax[$paramkey];
                             
@@ -682,6 +686,7 @@
         */
         private function doStringParameterTypeTest(&$input, $parameter, $ps = []) 
         {
+            $originput = $input;
             //in case of skip-trim flag we dont strip the input string
             //strip is by-default behaviour
             if (empty($ps['skip-trim'])) 
@@ -725,7 +730,7 @@
             
             //return error if empty
             if ($input == '' && $ps['required']) {
-                $this->paramerror = (sprintf('required parameter "%s" is empty', $parameter));
+                $this->paramerror = (sprintf('required parameter "%s" is empty (original input: "' . $originput . '")', $parameter));
             }
         }       
 
