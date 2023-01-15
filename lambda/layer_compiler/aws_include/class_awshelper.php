@@ -413,24 +413,30 @@
             ]);                
             
             $result = curl_exec($ch);
-            if (curl_exec($ch) === false) {
+            if ($result === false) {
                 return $this->innererr(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
             }                
             
             curl_close($ch);
             $result = json_decode($result, 1);
             
-            if ($result['status'] == 'error') {
-                $message = "
-                Caller Function: %s
-                Message: %s
-                
-                URL Called: %s
-                EndPoint Called: %s
-                
-                Payload: %s";
-                
-                return $this->innererr(sprintf($message, $this->metadata['caller']['function'], $result['data']['message'], $function_url, $data['endpoint'], print_r($data['payload'], 1)));
+            if ($result['status'] == 'error')
+            {
+                return $this->innererr(
+                    [
+                        'message' => 'UNABLE TO EXECUTE',
+                        'endpoint' => $data['endpoint'] ?? 'N/A',
+                        'function' => $data['lambda-function-name'] ?? 'N/A',
+                        'url' => $function_url,
+                        'payload' => $data['payload'],
+                        'message' => $result['data']['message'],
+                        'possible_causes' => [
+                            'Parse Error in Destination Method',
+                            'Payload Not Provided or Correctly Mapped'
+                        ]
+                    ]
+                );
+
             }
             else
             if ($result['status'] == 'success')
@@ -442,7 +448,23 @@
                 else return $this->innerok($result['data']);
             }
             
-            return $this->innererr(sprintf('NO DATA retrieved from doAWSAPIRequest->%s() @ URL %s. Parse Error in destination file or URL incorrect?', $data['endpoint'], $function_url));
+            
+            
+            return $this->innererr(
+                [
+                    'message' => 'NO DATA RETRIEVED',
+                    'endpoint' => $data['endpoint'] ?? 'N/A',
+                    'function' => $data['lambda-function-name'] ?? 'N/A',
+                    'url' => $function_url,
+                    'payload' => $data['payload'],
+                    'possible_causes' => [
+                        'Lambda URL is created but not accessible for outside world.',
+                        'Parse Error in Method code that was uncatchable before execution',
+                        'Result is not returned as $this->ok($message) | $this->err($message)',
+                        'Payload type mismatch or invalid'
+                    ]
+                ]
+            );
         }
 
         /*
@@ -515,6 +537,8 @@
             if (!is_object($conn)) {
                 return $this->innererr('$conn from establisConnection is not mysql class');
             }
+            
+            $conn->set_charset("utf8");
             
             $this->metadata['connections'][$data['connection']] = [
                 'established' => true,
