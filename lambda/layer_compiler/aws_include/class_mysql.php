@@ -109,9 +109,10 @@
                 
                 //insert
                 $insert = $this->doConstructInsert($data);
-                if (isset($insert['inner']['error'])) {
+                if (isset($insert['error'])) {
                     return $this->innererr($insert['message']);
-                } else $insert = $inset['message'];
+                } else $insert = $insert['message'];
+                
 
                 //update
                 $e = $this->doConstructUpdate($data);
