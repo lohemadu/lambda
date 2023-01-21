@@ -18,8 +18,10 @@
     define('__MYSQL_RUN_QUERY__', 'mysql_doQuery');
     define('__MYSQL_RUN_GET_COUNT__', 'mysql_getCount');
     define('__MYSQL_RUN_INSERT_OR_UPDATE_ROW__', 'mysql_doInsertOrUpdate');
+    
     define('__MYSQL_RUN_INSERT_QUERY__', 'mysql_doInsertQuery');
     define('__MYSQL_RUN_UPDATE_QUERY__', 'mysql_doUpdateQuery');
+    
     define('__MYSQL_RUN_SILENT_QUERY__', 'mysql_doVoidQuery');
     define('__MYSQL_RUN_SOFT_DELETE__', 'mysql_doSoftDelete');
     
@@ -131,6 +133,7 @@
                 else if ($internal) {
                     if (isset($data['parameters']['connection'])) 
                         if ($data['command'] != __MYSQL_ESTABLISH_CONNECTION__)
+                            if ($data['command'] != __MYSQL_GET_CONNECTION__)
                     {
                         //replace connection slug with connection object
                         $data['parameters']['connection'] = $this->metadata['connections'][$data['parameters']['connection']]['object'];

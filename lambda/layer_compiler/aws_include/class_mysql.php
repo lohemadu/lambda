@@ -45,7 +45,7 @@
             public function __mysql_doInsertQuery($data)
             {
                 $conn = $data['connection'];
-                if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
+                if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided: ' . print_r($data['connection'], 1));
                 
                 $query = $this->doConstructInsert($data);
                 if ($data['return-query'])
@@ -57,6 +57,38 @@
                 ]);
                 if ($msg['success']) return $this->innerok($msg['message']);
                 return $this->innererr($msg['message']);
+            }
+            
+            public function __mysql_doUpdateQuery($data)
+            {
+                $conn = $data['connection'];
+                if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided: ' . print_r($data['connection'], 1));
+                
+                //modify parameters slightly
+                $queryfields = array_merge($data['where'], $data['fields']);
+                $keys = array_keys($data['where']);
+                
+                $getupdatepack = [
+                    'tablename' => $data['tablename'],
+                    'fields' => $queryfields,
+                    'keys' => $keys
+                ];
+                
+                $e = $this->doConstructUpdate($getupdatepack);
+                if (isset($e['inner']['error'])) {
+                    return $this->innererr($e['message']);
+                } else $query = $e['message'];
+                
+                if ($data['return-query'])
+                    return $this->innerok($query);
+                    
+                $msg = $this->__mysql_doVoidQuery([
+                    'connection' => $conn,
+                    'query' => $query
+                ]);
+                
+                if ($msg['success']) return $this->innerok($msg['message']);
+                return $this->innererr($msg['message']);                
             }
 
             public function __mysql_doVoidQuery($data) 
@@ -210,6 +242,9 @@
                     return $this->innererr('where clause is not defined for count query.');
                 }
                 
+                //uncover special commands
+                $where = str_replace('!!!\'', '', str_replace('\'!!!', '', $where));
+                
                 $query = sprintf("SELECT * FROM `%s` WHERE %s", $data['tablename'], $where);
 
                 if (!$res = $conn->query($query)) {
@@ -217,7 +252,10 @@
                 }
                 
                 if (empty(mysqli_num_rows($res))) {
-                    return $this->innererr('no records retrieved from $mysql->__mysql_getSingleCellValue(): ' . $query);
+                    if (!empty($data['fail-on-null']))
+                        return $this->innererr('no records retrieved from $mysql->__mysql_getSingleCellValue(): ' . $query);
+                    else
+                        return $this->innerok('');
                 }
                 
                 if (mysqli_num_rows($res) > 1 && !empty($data['singleexpected'])) {
