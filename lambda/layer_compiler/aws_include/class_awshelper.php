@@ -411,14 +411,21 @@
               CURLOPT_RETURNTRANSFER => 1,
               CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
               CURLOPT_CUSTOMREQUEST => 'POST',
+              CURLOPT_FOLLOWLOCATION => false,
               CURLOPT_POSTFIELDS => json_encode($data['payload']),
-              CURLOPT_HTTPHEADER => ['Content-Type: application/json']
+              CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+              CURLOPT_TIMEOUT => 0
             ]);                
             
             $result = curl_exec($ch);
             if ($result === false) {
                 return $this->innererr(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
-            }                
+            }
+
+            if(curl_errno($ch))
+            {
+                return $this->innererr(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s with error message: %s', $data['endpoint'], $function_url, curl_error($ch)));
+            }
             
             curl_close($ch);
             $result = json_decode($result, 1);
