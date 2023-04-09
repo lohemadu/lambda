@@ -9,7 +9,7 @@
     define('__AWS_API_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
     
     define('__MYSQL_ESTABLISH_CONNECTION__', 'doEstablishSQLConnection');
-    define('__MYSQL_GET_CONNECTION_OBJECT__', 'getConnection');
+    define('__MYSQL_GET_CONNECTION__', 'getConnection');
     
     define('__MYSQL_FETCH_FIRST_ROW__', 'mysql_doQuerySingleRecord');
     define('__MYSQL_FETCH_FIRST_ROW_CELL__', 'mysql_getSingleCellValue');
