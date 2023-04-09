@@ -321,7 +321,7 @@
         private function __doStringDecrypt($data) 
         {
             if (empty($data['input'])) {
-                return $helper->innererr('noting to decrypt');
+                return $this->innererr('noting to decrypt');
             }
             
             if (empty($this->salt)) {
@@ -348,15 +348,15 @@
         private function __doStringEncrypt($data) 
         {
             if (empty($data['input'])) {
-                return ('noting to encrypt');
+                return $this->innererr('noting to encrypt');
             }
             
             if (empty($this->salt)) {
-                return ('encryption SALT is not defined');
+                return $this->innererr('encryption SALT is not defined');
             }
             
             if (empty($this->config['encryption_key'])) {
-                return ('encryption key in config file is not set');
+                return $this->innererr('encryption key in config file is not set');
             }
             
             $encrypt_method = "AES-256-CBC";
@@ -368,7 +368,7 @@
             $output = openssl_encrypt($data['input'], $encrypt_method, $key, 0, $iv);
             $output = base64_encode($output);
             
-            return $this->ok($output);
+            return $this->innerok($output);
         }  
 
 
