@@ -26,6 +26,7 @@
     define('__MYSQL_RUN_SOFT_DELETE__', 'mysql_doSoftDelete');
     
     define('__DECRYPT_STRING__', 'doStringDecrypt');
+    define('__ENCRYPT_STRING__', 'doStringEncrypt');
 
     class awshelper extends corebase
     {   
@@ -340,6 +341,37 @@
             
             return $this->innerok($output);
         }        
+
+
+
+        /* encrypting string with key and salt */
+        private function __doStringEncrypt($data) 
+        {
+            if (empty($data['input'])) {
+                return ('noting to encrypt');
+            }
+            
+            if (empty($this->salt)) {
+                return ('encryption SALT is not defined');
+            }
+            
+            if (empty($this->config['encryption_key'])) {
+                return ('encryption key in config file is not set');
+            }
+            
+            $encrypt_method = "AES-256-CBC";
+            $key = hash('sha256', $this->config['encryption_key']);
+            
+            // iv - encrypt method AES-256-CBC expects 16 bytes - else you will get a warning
+            $iv = substr(hash('sha256', $this->salt), 0, 16);
+            
+            $output = openssl_encrypt($data['input'], $encrypt_method, $key, 0, $iv);
+            $output = base64_encode($output);
+            
+            return $this->ok($output);
+        }  
+
+
         
         /* function is creating AWS Lambda Client for the user */
         private function __getAWSLambdaClient($data) 
