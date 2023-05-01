@@ -101,9 +101,10 @@
         }
 
         //generating general public error message json with payload
-        public function err($data = NULL)
+        public function err($data = NULL, $extrafields = [])
         {
-            /*if (debug_backtrace()[1]['function'] == 'run')*/ {
+            /*if (debug_backtrace()[1]['function'] == 'run')*/ 
+            {
                 $this->returned++;
                 $this->lifetime_executions++;
             }
@@ -146,7 +147,7 @@
         }
 
         //generating general public success message json with payload
-        public function ok($data = NULL)
+        public function ok($data = NULL, $pagination = [])
         {
             /*if (debug_backtrace()[1]['function'] == 'run') */ {
                 $this->returned++;
@@ -174,8 +175,8 @@
                 if ($this->hasElements(@$pagination))
                 {
                     foreach ($pagination as $k => $v) {
-                        if (in_array($k, ['perpage', 'page', 'totalpages', 'totalrecords', 'count']))
-                            $return[$k] = $v;
+                        if (in_array($k, ['page', 'perpage', 'offset', 'previous_page', 'next_page', 'adjacents', 'total_pages']))
+                            $return['pagination'][$k] = $v;
                     }
                 }
                 
@@ -787,6 +788,7 @@
             $itens = $this->config;
             foreach($paths as $ndx) {
                 if (isset($itens[$ndx])) $itens = $itens[$ndx];
+                else return 'NO-SUCH-INDEX';
             }
             return $this->paramDecrypt($itens);
         }            

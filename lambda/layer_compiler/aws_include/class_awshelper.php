@@ -27,6 +27,7 @@
     
     define('__DECRYPT_STRING__', 'doStringDecrypt');
     define('__ENCRYPT_STRING__', 'doStringEncrypt');
+    define('__CALCULATE_PAGINATION__', 'doPaginationCalculation');
 
     class awshelper extends corebase
     {   
@@ -373,6 +374,55 @@
 
 
         
+        /* function is calculating pagination information */
+        private function __doPaginationCalculation($data) {
+                if (!$data[$testfield = 'page']) return $this->innererr([
+                    'message' => 'required parameter missing: [' . $testfield . ']'
+                ]);                 
+                
+                if (!$data[$testfield = 'perpage']) return $this->innererr([
+                    'message' => 'required parameter missing: [' . $testfield . ']'
+                ]);                 
+                
+                if (!$data[$testfield = 'total-records']) return $this->innererr([
+                    'message' => 'required parameter missing: [' . $testfield . ']'
+                ]);                 
+                
+                $page = sprintf('%d', $data['page']);
+                $perpage = sprintf('%d', $data['perpage']);
+                $total_records = sprintf('%d', $data['total-records']);
+                
+                if ($page < 1) $page = 1;
+                if ($perpage < 1) $perpage = 25;
+                if ($perpage < 5) $perpage = 5;
+                if ($perpage > 1000) $perpage = 1000;
+                
+                $total_pages = ceil($total_records / $perpage);
+                //hard reset to lower stratum
+                if ($page > $total_pages) $page = $total_pages;
+                
+                $offset = ($page - 1) * $perpage;
+                $previous_page = $page - 1;
+                $next_page = $page + 1;
+                $adjacents = 2;
+                
+                if ($previous_page < 0)$previous_page = 0;
+                
+                return $this->innerok([
+                    'result' => [
+                        'page' => $page,
+                        'perpage' => $perpage,
+                        'offset' => $offset,
+                        'previous_page' => $previous_page,
+                        'next_page' => $next_page,
+                        'adjacents' => $adjacents,
+                        'total_pages' => $total_pages                       
+                    ]
+                ]);            
+        }
+
+
+
         /* function is creating AWS Lambda Client for the user */
         private function __getAWSLambdaClient($data) 
         {
