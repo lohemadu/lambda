@@ -28,6 +28,7 @@
     define('__DECRYPT_STRING__', 'doStringDecrypt');
     define('__ENCRYPT_STRING__', 'doStringEncrypt');
     define('__CALCULATE_PAGINATION__', 'doPaginationCalculation');
+    define('__NOONES_API_REQUEST__', 'doNoonesAPIRequest');
 
     class awshelper extends corebase
     {   
@@ -657,8 +658,30 @@
             $row = mysqli_fetch_assoc($res);
             
             return $this->innerok($row);
+        }
+        
+        
+        private function __doNoonesAPIRequest($data) {
+            
+            $api_key = $this->getConfig('api->noones->api_key');
+            $api_secret = $this->getConfig('api->noones->api_secret');
+            
+            $payload = array(
+                'apikey' => $api_key, 
+                'nonce' => time()
+            );            
+            
+            foreach($data['payload'] as $key => $val) $payload[$key] = $val;
+            
+            $apiseal = hash_hmac('sha256', http_build_query($payload, "", '&', PHP_QUERY_RFC3986), $api_secret);
+            $payload['apiseal'] = $apiseal;
             
             
+            
+            $url = 'curl -X POST ' . 'https://noones.com/api/' . $data['request'] . ' -H "Accept: application/json" -H "Content-Type: text/plain" --data "' . http_build_query($payload, "", '&', PHP_QUERY_RFC3986) . '"';
+            $data = json_decode(shell_exec($url), true);
+            
+            return $this->innerok($data);
         }
         
     }

@@ -135,23 +135,21 @@
                 if (!is_object($conn)) return $this->innererr('Required parameter "connection" was not provided');
                 
                 //continue with usual execution
-                $querypool[] = sprintf('SET @NEW_AI = (SELECT MAX(`%s`) + 1 FROM `%s`);', $data['auto-increment-field'], $data['tablename']);
+                $querypool[] = sprintf('SET @NEW_AI = (SELECT IFNULL(MAX(`%s`) + 1, 1) FROM `%s`);', $data['auto-increment-field'], $data['tablename']);
                 $querypool[] = sprintf("SET @ALTER_SQL = CONCAT('ALTER TABLE `%s` AUTO_INCREMENT =', @NEW_AI);", $data['tablename']);
                 $querypool[] = sprintf("PREPARE NEWSQL FROM @ALTER_SQL; EXECUTE NEWSQL;");
                 
                 //insert
                 $insert = $this->doConstructInsert($data);
                 if (isset($insert['error'])) {
-                    return $this->innererr($insert['message']);
+                    return $this->innererr($insert['message'] . ' -- 1000');
                 } else $insert = $insert['message'];
                 
-
-                //update
                 $e = $this->doConstructUpdate($data);
                 if (isset($e['inner']['error'])) {
-                    return $this->innererr($e['message']);
+                    return $this->innererr($e['message'] . ' -- 1001');
                 } else $update = $e['message'];
-
+                
                 //modify update query for the multiquery                
                 if (empty($ini = strpos($update, $start = ' SET '))) return $this->innererr('trim error');
                 $ini += strlen($start);
@@ -162,7 +160,7 @@
                 $querypool[] = 'ON DUPLICATE KEY UPDATE ' . trim(substr($update, $ini, $len)) . ';';
                 
                 $query = implode("\n", $querypool);
-
+                
                 if (!$res = $conn->multi_query($query)) {
                     while ($conn->next_result()) { if (!$conn->more_results()) break; }
                     return $this->innererr('mysql error: ' . $conn->error . 'when running a query: <br><br>' . $data['query']);
