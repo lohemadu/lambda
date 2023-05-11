@@ -29,6 +29,7 @@
     define('__ENCRYPT_STRING__', 'doStringEncrypt');
     define('__CALCULATE_PAGINATION__', 'doPaginationCalculation');
     define('__NOONES_API_REQUEST__', 'doNoonesAPIRequest');
+    define('__PAXFUL_API_REQUEST__', 'doPaxfulAPIRequest');
 
     class awshelper extends corebase
     {   
@@ -661,8 +662,8 @@
         }
         
         
-        private function __doNoonesAPIRequest($data) {
-            
+        private function __doNoonesAPIRequest($data) 
+        {            
             $api_key = $this->getConfig('api->noones->api_key');
             $api_secret = $this->getConfig('api->noones->api_secret');
             
@@ -676,13 +677,33 @@
             $apiseal = hash_hmac('sha256', http_build_query($payload, "", '&', PHP_QUERY_RFC3986), $api_secret);
             $payload['apiseal'] = $apiseal;
             
-            
-            
             $url = 'curl -X POST ' . 'https://noones.com/api/' . $data['request'] . ' -H "Accept: application/json" -H "Content-Type: text/plain" --data "' . http_build_query($payload, "", '&', PHP_QUERY_RFC3986) . '"';
             $data = json_decode(shell_exec($url), true);
             
             return $this->innerok($data);
         }
+
+
+        private function __doPaxfulAPIRequest($data) 
+        {            
+            $api_key = $this->getConfig('api->paxful->api_key');
+            $api_secret = $this->getConfig('api->paxful->api_secret');
+            
+            $payload = array(
+                'apikey' => $api_key, 
+                'nonce' => time()
+            );            
+            
+            foreach($data['payload'] as $key => $val) $payload[$key] = $val;
+            
+            $apiseal = hash_hmac('sha256', http_build_query($payload, "", '&', PHP_QUERY_RFC3986), $api_secret);
+            $payload['apiseal'] = $apiseal;
+            
+            $url = 'curl -X POST ' . 'https://paxful.com/api/' . $data['request'] . ' -H "Accept: application/json" -H "Content-Type: text/plain" --data "' . http_build_query($payload, "", '&', PHP_QUERY_RFC3986) . '"';
+            $data = json_decode(shell_exec($url), true);
+            
+            return $this->innerok($data);
+        }        
         
     }
 
