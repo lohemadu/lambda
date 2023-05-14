@@ -30,6 +30,10 @@
     define('__CALCULATE_PAGINATION__', 'doPaginationCalculation');
     define('__NOONES_API_REQUEST__', 'doNoonesAPIRequest');
     define('__PAXFUL_API_REQUEST__', 'doPaxfulAPIRequest');
+    define('__ERPLY_API_REQUEST__', 'doErplyAPIRequest');
+    
+    define('__GET_VAR__', '__getGlobalVariable');
+    define('__SET_VAR__', '__setGlobalVariable');
 
     class awshelper extends corebase
     {   
@@ -703,7 +707,99 @@
             $data = json_decode(shell_exec($url), true);
             
             return $this->innerok($data);
-        }        
+        }   
+        
+        
+        private function __doErplyAPIRequest($data)
+        {
+            //payload:  141
+            //  -request (string)
+            //  -payload (array)
+            //  -method (POST,GET...)
+            
+            $clientid = $this->getConfig('api->erply->clientid');
+            $erplypass = $this->getConfig('api->erply->password');
+
+            $conn = $data['connection'];
+            
+            $query = "SELECT session_key FROM `erply`.`erply_session_key` WHERE TIMESTAMPDIFF(MINUTE, `session_time`, NOW()) < 45 AND session_id = 1";
+                
+            if (!$res = $conn->query($query)) return $this->innererr($conn->error . ' in __doErplyAPIRequest placement 1');
+            $row = mysqli_fetch_assoc($res);
+            $sk = $row['session_key'];                
+            
+            if (!$sk or $sk == '')
+            {
+                $curl = curl_init();
+                curl_setopt_array($curl, array(
+                    CURLOPT_URL => 'https://' . $clientid . '.erply.com/api/?clientCode=' . $clientid . '&request=verifyUser&username=api&password=' . $erplypass,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                ));
+                
+                $sk = json_decode(curl_exec($curl), 1)['records'][0]['sessionKey'];
+                $query = "UPDATE `erply`.`erply_session_key` SET `session_key` = '" . $sk . "', session_time = NOW() WHERE session_id = 1";
+                if (!$res = $conn->query($query)) return $this->innererr($conn->error . ' in __doErplyAPIRequest placement 2');
+                curl_close($curl);
+            }
+            
+            if (!$sk) return $this->innererr('session_key was not defined');
+            
+            //make rest of the query
+            $data['payload']['sessionKey'] = $sk;
+            $data['payload']['clientCode'] = $clientid;
+            $data['payload']['request'] = $data['request'];         
+            
+            $query = http_build_query($data['payload']);
+            
+            $curl = curl_init();
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => 'https://' . $clientid . '.erply.com/api/?' . $query,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => '',
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 0,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => $data['method'],
+                CURLOPT_HTTPHEADER => ['accept: application/json'],
+            ));            
+            
+            $response = curl_exec($curl);
+            return $this->innerok(json_decode($response, 1));
+        }
+        
+        private function __getGlobalVariable($data) 
+        {
+            //payload:   139
+            //  -connection
+            //  -key
+            //  -default
+            if (!is_object($data['connection'])) return $this->innererr('Required MySQL connection __getGlobalVariable() for is not established: ' . print_r($data));
+            $conn = $data['connection'];
+            
+            $query = "SELECT IFNULL(variable_value, '" . addslashes($data['default']) . "') as `result` FROM `aws_lambda_core`.`_aws_global_variables` WHERE variable_key = '" . addslashes($data['key']) . "'";
+            if (!$res = $conn->query($query)) {
+                return $this->innererr($conn->error);
+            }
+            if (!mysqli_num_rows($res)) return $this->innerok($data['default']);
+            
+            $row = mysqli_fetch_assoc($res);
+            
+            return $this->innerok($row['result']);
+        }
+        
+        
+        private function __setGlobalVariable($data) {
+            //payload:   140
+            //  -connection
+            //  -key
+            //  -value
+            
+            if (!is_object($data['connection'])) return $this->innererr('Required MySQL connection __setGlobalVariable() for is not established: ' . print_r($data));
+            $conn = $data['connection'];
+            
+        }
         
     }
 
