@@ -31,6 +31,7 @@
     define('__NOONES_API_REQUEST__', 'doNoonesAPIRequest');
     define('__PAXFUL_API_REQUEST__', 'doPaxfulAPIRequest');
     define('__ERPLY_API_REQUEST__', 'doErplyAPIRequest');
+    define('__PIGU_API_REQUEST__', 'doPiguAPIRequest');
     
     define('__GET_VAR__', '__getGlobalVariable');
     define('__SET_VAR__', '__setGlobalVariable');
@@ -506,6 +507,7 @@
             ]);                
             
             $result = curl_exec($ch);
+            
             if ($result === false) {
                 return $this->innererr(sprintf('CURL failed doAWSAPIRequest->%s() for endpoint %s', $data['endpoint'], $function_url));
             }
@@ -708,6 +710,108 @@
             
             return $this->innerok($data);
         }   
+        
+        
+        
+        private function __doPiguAPIRequest($data) {
+            //payload:  149
+            //  -endpoint (string)
+            //  -payload (array)
+            //  -method (POST,GET...) 
+            //  -token (string);
+            
+            $basepath = 'https://pmpapi.pigugroup.eu/v2/' . $data['endpoint'];
+            
+            if ($data['endpoint'] == 'login') 
+            {   
+                $query = "
+                SELECT 
+                    kaup24_token as `token` FROM `pigu`.`pigu_token` 
+                WHERE `active` = 1 AND DATE_ADD(date_created, INTERVAL 3 WEEK) > NOW()
+                    ORDER BY date_created LIMIT 1";
+                    
+                $conn = $data['connection'];
+                    
+                if (!$res = $conn->query($query)) return $this->innererr($conn->error . ' in __doPiguAPIRequest placement 1');
+                if (!mysqli_num_rows($res)) {
+                    //have to create new token...
+                    $conn->query("UPDATE `pigu`.`pigu_token` SET `active` = 0");
+                    $data['payload'] = [
+                        'username' => $this->getConfig('api->pigu->username'),
+                        'password' => $this->getConfig('api->pigu->password')
+                    ];
+                    $data['token'] = 'undefined';
+                    
+                } else {
+                    $row = mysqli_fetch_assoc($res);
+                    return $this->innerok($row['token']);
+                }
+            }
+            
+            $postop = [];
+            if ($data['method'] == 'GET')
+            {
+                if (is_array($data['payload']))
+                    $basepath .= '?' . http_build_query($data['payload']);
+            } else
+            if ($data['method'] == 'PATCH' or $data['method'] == 'POST')
+            {
+                $postop = $data['payload'];
+            }                
+            else
+                return $this->innererr('no such HTTP method: "' . $data['method'] . '"');                
+
+            $curl = curl_init();
+            
+            $params = [
+                CURLOPT_URL => $basepath,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => '',
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 0,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json', 
+                    'Accept: application/json',
+                    'Authorization: Pigu-mp ' . $data['token']
+                ]
+            ];
+            
+            if ($data['method'] != 'GET') {
+                $params[CURLOPT_CUSTOMREQUEST] = $request;
+                $params[CURLOPT_POSTFIELDS] = json_encode($postop);
+            }
+            
+            curl_setopt_array($curl, $params);       
+            
+            $response = curl_exec($curl);
+            if(curl_errno($curl) or empty($response)) {
+                sleep(3); // Oota 3 sekundit
+                $response = curl_exec($curl); // Proovi uuesti
+            }
+            
+            curl_close($curl);
+            
+            $return = json_decode($response); 
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $result = json_decode($response, 1);
+            } else {
+                return $this->innererr('something happened here.... should not happen!');
+            }
+            
+            
+            if ($data['endpoint'] == 'login') {
+                $newtoken = $result['token'];
+                $conn->query(sprintf("INSERT INTO `pigu`.`pigu_token` SET `kaup24_token` = '%s', `date_created` = NOW(), `active` = 1",
+                    $newtoken));
+                return $this->innerok($result['token']);
+            }
+            
+            return $this->innerok($result);
+            
+        }
+        
         
         
         private function __doErplyAPIRequest($data)
