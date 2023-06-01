@@ -28,10 +28,12 @@
     define('__DECRYPT_STRING__', 'doStringDecrypt');
     define('__ENCRYPT_STRING__', 'doStringEncrypt');
     define('__CALCULATE_PAGINATION__', 'doPaginationCalculation');
+    
     define('__NOONES_API_REQUEST__', 'doNoonesAPIRequest');
     define('__PAXFUL_API_REQUEST__', 'doPaxfulAPIRequest');
     define('__ERPLY_API_REQUEST__', 'doErplyAPIRequest');
     define('__PIGU_API_REQUEST__', 'doPiguAPIRequest');
+    define('__ARVED_API_REQUEST__', 'doArvedAPIRequest');
     
     define('__GET_VAR__', '__getGlobalVariable');
     define('__SET_VAR__', '__setGlobalVariable');
@@ -713,6 +715,33 @@
         
         
         
+        private function __doArvedAPIRequest($data)
+        {
+            $basepath = 'https://arved.cloudscale.ee/api/' . $data['endpoint'];
+            $ch = curl_init();
+            
+            $user = $this->getConfig('api->arved->username');
+            $pass = $this->getConfig('api->arved->password');
+            
+            curl_setopt($ch, CURLOPT_URL, $basepath);
+            curl_setopt($ch, CURLOPT_USERPWD, $user . ':' . $pass);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data['payload']));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $data['method']);
+    
+            $response = curl_exec($ch);
+
+            $response = json_decode($response, true);                        
+            if (json_last_error() == JSON_ERROR_NONE) {
+                if (isset($response['data']))
+                    return $this->innerok($response);
+                else
+                    return $this->innererr($response);
+            }
+            return $this->innererr($response);
+        }
+        
+        
         private function __doPiguAPIRequest($data) {
             //payload:  149
             //  -endpoint (string)
@@ -811,8 +840,6 @@
             return $this->innerok($result);
             
         }
-        
-        
         
         private function __doErplyAPIRequest($data)
         {
