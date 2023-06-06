@@ -445,6 +445,23 @@
             ]);
             return $lambdaclient;
         }
+
+
+
+        /* function is creating AWS Lambda Client for the user */
+        private function __getAWSS3Client($data) 
+        {
+            $lambdaclient = new \Aws\S3\S3Client([
+                'region' => $data['region'],
+                'version' => '2015-03-31',
+                'credentials' => [
+                    'key' => $this->getConfig('aws->aws_key'),
+                    'secret' => $this->getConfig('aws->aws_secret')
+                ]
+            ]);
+            return $lambdaclient;
+        }
+
         
         /*
             function is calling AWS API Request based by endpoint path (/aws/layers/refresh)
