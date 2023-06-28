@@ -5,7 +5,11 @@
     define('__TYPE_AWS_FUNCTION__', 'AWS_FUNCTION');
 
     define('__AWS_API_REQUEST__', 'doAWSAPIRequest');
+    
     define('__AWS_API_GET_LAMBDACLIENT__', 'getAWSLambdaClient');
+    define('__AWS_API_GET_S3CLIENT__', 'getAWSS3Client');
+    define('__AWS_API_GET_EC2CLIENT__', 'getAWSEC2Client');
+    
     define('__AWS_API_GET_FUNCTION_BY_FUNCTION_NAME__', 'getFunctionDataByFunctionName');
     
     define('__MYSQL_ESTABLISH_CONNECTION__', 'doEstablishSQLConnection');
@@ -451,16 +455,31 @@
         /* function is creating AWS Lambda Client for the user */
         private function __getAWSS3Client($data) 
         {
-            $lambdaclient = new \Aws\S3\S3Client([
+            $s3client = new \Aws\S3\S3Client([
                 'region' => $data['region'],
-                'version' => '2015-03-31',
+                'version' => '2006-03-01',
                 'credentials' => [
                     'key' => $this->getConfig('aws->aws_key'),
                     'secret' => $this->getConfig('aws->aws_secret')
                 ]
             ]);
-            return $lambdaclient;
+            return $s3client;
         }
+
+
+        /* function is creating AWS Lambda Client for the user */
+        private function __getAWSEC2Client($data) 
+        {
+            $ec2client = new \Aws\Ec2\Ec2Client([
+                'region' => $data['region'],
+                'version' => '2016-11-15',
+                'credentials' => [
+                    'key' => $this->getConfig('aws->ec2->aws_ec2_key'),
+                    'secret' => $this->getConfig('aws->ec2->aws_ec2_secret')
+                ]
+            ]);
+            return $ec2client;
+        }        
 
         
         /*
