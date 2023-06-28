@@ -616,7 +616,7 @@
         
         private function doBooleanParameterTypeTest(&$input, $parameter, $ps = [])
         {
-            if ($input == '' && $ps['empty-is-error'] == 1) {
+            if (empty($input) && !empty($ps['empty-is-error'])) {
                 $this->paramerror = (sprintf('required parameter "%s" is not one of the following [ true | false | 1 | 0 ]', $parameter));
             }
             

@@ -497,7 +497,7 @@
                         ],
                         'column' => 'function_url',
                         'singleexpected' => 1,
-                        'connection' => 'core'
+                        'connection' => 'main-read'
                     ]
                 ])) { 
                     if ($err == 'NULL') return $this->innererr(sprintf('Unable to retrieve Amazon URL for Function %s', $data['lambda-function-name']));
